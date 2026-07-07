@@ -1,4 +1,3 @@
-cat > .gitignore << 'EOF'
 # Python
 __pycache__/
 *.pyc
@@ -7,6 +6,7 @@ __pycache__/
 *.egg-info/
 
 # SQLite
+data/
 *.db
 *.db-journal
 *.sqlite3
@@ -28,8 +28,5 @@ __pycache__/
 # Node (if any spec-kit/tooling artifacts land here)
 node_modules/
 
-
 # Cluade dir
 .claude/
-.specify/
-EOF
