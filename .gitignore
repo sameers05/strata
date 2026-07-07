@@ -1,0 +1,35 @@
+cat > .gitignore << 'EOF'
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+*.egg-info/
+
+# SQLite
+*.db
+*.db-journal
+*.sqlite3
+
+# Alembic (keep versions/, ignore local artifacts if any)
+
+# Podman/containers
+*.tar
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# uv
+.uv/
+
+# Node (if any spec-kit/tooling artifacts land here)
+node_modules/
+
+
+# Cluade dir
+.claude/
+.specify/
+EOF
