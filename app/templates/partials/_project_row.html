@@ -1,0 +1,15 @@
+<tr id="project-row-{{ project.id }}">
+  <td>{{ project.serial_num }}</td>
+  <td><a href="/projects/{{ project.id }}">{{ project.title }}</a></td>
+  <td>{{ project.description }}</td>
+  <td>{{ project.start_date or '' }}</td>
+  <td>{{ project.finished_date or '' }}</td>
+  <td>{{ project.notes or '' }}</td>
+  <td>{{ project.status.value }}</td>
+  <td>
+    {% if not readonly %}
+    <a href="/projects/{{ project.id }}/edit">Edit</a>
+    <button type="button" hx-delete="/projects/{{ project.id }}" hx-target="closest tr" hx-swap="delete" hx-confirm="Delete this project?">Delete</button>
+    {% endif %}
+  </td>
+</tr>

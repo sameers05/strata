@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<h2>Projects</h2>
+<p><a href="/projects/new">New project</a> · <a href="/projects/deleted">Deleted items</a></p>
+
+{% if projects %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Title</th>
+      <th>Description</th>
+      <th>Start</th>
+      <th>Finished</th>
+      <th>Notes</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for project in projects %}
+    {% include "partials/_project_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No projects yet. <a href="/projects/new">Create your first project</a>.</p>
+{% endif %}
+{% endblock %}

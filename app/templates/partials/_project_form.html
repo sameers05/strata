@@ -1,0 +1,50 @@
+{% set current_status = project.status.value if project else 'new' %}
+{% include "partials/_form_errors.html" %}
+
+<form {% if project %}hx-put="/projects/{{ project.id }}"{% else %}hx-post="/projects"{% endif %} hx-swap="none">
+  {% if project %}
+  <div class="field">
+    <label for="serial_num">Serial #</label>
+    <input type="number" id="serial_num" name="serial_num" value="{{ project.serial_num }}" required>
+  </div>
+  {% endif %}
+
+  <div class="field">
+    <label for="title">Title</label>
+    <input type="text" id="title" name="title" maxlength="200" value="{{ project.title if project else '' }}" required>
+  </div>
+
+  <div class="field">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" maxlength="2000" required>{{ project.description if project else '' }}</textarea>
+  </div>
+
+  <div class="field">
+    <label for="start_date">Start date</label>
+    <input type="date" id="start_date" name="start_date" value="{{ project.start_date if project and project.start_date else '' }}">
+  </div>
+
+  <div class="field">
+    <label for="finished_date">Finished date</label>
+    <input type="date" id="finished_date" name="finished_date" value="{{ project.finished_date if project and project.finished_date else '' }}">
+  </div>
+
+  <div class="field">
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes">{{ project.notes if project and project.notes else '' }}</textarea>
+  </div>
+
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="new" {% if current_status == "new" %}selected{% endif %}>New</option>
+      <option value="in-progress" {% if current_status == "in-progress" %}selected{% endif %}>In progress</option>
+      <option value="complete" {% if current_status == "complete" %}selected{% endif %}>Complete</option>
+      <option value="blocked" {% if current_status == "blocked" %}selected{% endif %}>Blocked</option>
+      <option value="deferred" {% if current_status == "deferred" %}selected{% endif %}>Deferred</option>
+      <option value="archived" {% if current_status == "archived" %}selected{% endif %}>Archived</option>
+    </select>
+  </div>
+
+  <button type="submit">{{ "Save changes" if project else "Create project" }}</button>
+</form>
