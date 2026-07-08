@@ -45,6 +45,16 @@ def test_us1_create_and_list_flow(client: TestClient) -> None:
     assert "Title is required" in r.text
 
 
+def test_active_list_has_no_delete_control(client: TestClient) -> None:
+    _create(client, title="Row Without Delete", description="d")
+
+    r = client.get("/projects")
+    assert r.status_code == 200
+    assert "hx-delete" not in r.text
+    assert "/projects/new" in r.text or "New project" in r.text
+    assert "/edit" in r.text  # Edit link is still present
+
+
 def test_us2_view_detail_flow(client: TestClient) -> None:
     _create(client, title="Detail Project", description="A description")
 
@@ -56,6 +66,17 @@ def test_us2_view_detail_flow(client: TestClient) -> None:
     assert "A description" in r.text
     # blank optionals (start_date, finished_date, notes) rendered as empty, not an error
     assert r.status_code != 500
+
+
+def test_detail_page_has_page_errors_container(client: TestClient) -> None:
+    _create(client, title="Errors Container Project", description="d")
+
+    project_id = _row_ids(client.get("/projects").text)[0]
+
+    r = client.get(f"/projects/{project_id}")
+    assert r.status_code == 200
+    assert 'id="page-errors"' in r.text
+    assert "hx-swap-oob" in r.text
 
 
 def test_us3_edit_flow(client: TestClient) -> None:
@@ -141,6 +162,7 @@ def test_us4_soft_delete_and_deleted_items_flow(client: TestClient) -> None:
 
     r = client.delete(f"/projects/{delete_id}")
     assert r.status_code == 200
+    assert r.headers.get("hx-redirect") == "/projects"
 
     r = client.get("/projects")
     assert "To Delete" not in r.text
