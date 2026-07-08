@@ -22,9 +22,13 @@ def _validate_common_fields(
     finished_date: date | None,
 ) -> dict[str, str]:
     errors: dict[str, str] = {}
-    if len(title) > 200:
+    if not title.strip():
+        errors["title"] = "Title is required."
+    elif len(title) > 200:
         errors["title"] = "Title must be 200 characters or fewer."
-    if len(description) > 2000:
+    if not description.strip():
+        errors["description"] = "Description is required."
+    elif len(description) > 2000:
         errors["description"] = "Description must be 2000 characters or fewer."
     if start_date is not None and finished_date is not None and finished_date < start_date:
         errors["finished_date"] = "Finished date cannot be earlier than start date."

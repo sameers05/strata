@@ -99,15 +99,15 @@ Single project. `app/` holds the application package, `alembic/` holds migration
 
 **Purpose**: `app/routers/projects.py` — thin HTTP layer over the Phase 3 service functions, implementing the exact success/failure contract from contracts/projects-routes.md (HX-Redirect on success, 200 + OOB error fragment on validation failure, row-level delete). Routes reference templates from Phase 6 by name; they are not renderable end-to-end until Phase 6 exists, which is expected given the requested phase order.
 
-- [ ] T025 [US1] `GET /projects` — call `list_active_projects`, render `projects/list.html` (must render an empty-state, never an error, when there are no active projects) (depends on: T015)
-- [ ] T026 [US1] `GET /projects/new` — render `projects/new.html` with a blank form (depends on: none new)
-- [ ] T027 [US1] `POST /projects` — call `create_project`; on success return `200` with `HX-Redirect: /projects`; on `ProjectValidationError` return `200` with only the OOB `#form-errors` fragment, leaving the submitted form untouched (depends on: T012, T016, T026)
-- [ ] T028 [US2] `GET /projects/{id}` — render `projects/detail.html` showing every field, including blank optionals; `404` if missing or soft-deleted (depends on: T015)
-- [ ] T029 [US3] `GET /projects/{id}/edit` — render `projects/edit.html` pre-filled; `404` if missing or soft-deleted (depends on: T015)
-- [ ] T030 [US3] `PUT /projects/{id}` — call `update_project`; same success/failure contract as T027 (depends on: T013, T016, T029)
-- [ ] T031 [US4] `DELETE /projects/{id}` — call `soft_delete_project`; `200` with empty body on success (HTMX removes the row via `hx-swap="delete"` regardless of body); `404` if already missing/soft-deleted (depends on: T014)
-- [ ] T032 [US4] `GET /projects/deleted` — render `projects/deleted.html`, strictly read-only, ascending by `serial_num` (depends on: T015)
-- [ ] T033 Wire the router into the app: `app.include_router(projects.router)` in `app/main.py` (depends on: T006, T025–T032)
+- [X] T025 [US1] `GET /projects` — call `list_active_projects`, render `projects/list.html` (must render an empty-state, never an error, when there are no active projects) (depends on: T015)
+- [X] T026 [US1] `GET /projects/new` — render `projects/new.html` with a blank form (depends on: none new)
+- [X] T027 [US1] `POST /projects` — call `create_project`; on success return `200` with `HX-Redirect: /projects`; on `ProjectValidationError` return `200` with only the OOB `#form-errors` fragment, leaving the submitted form untouched (depends on: T012, T016, T026)
+- [X] T028 [US2] `GET /projects/{id}` — render `projects/detail.html` showing every field, including blank optionals; `404` if missing or soft-deleted (depends on: T015)
+- [X] T029 [US3] `GET /projects/{id}/edit` — render `projects/edit.html` pre-filled; `404` if missing or soft-deleted (depends on: T015)
+- [X] T030 [US3] `PUT /projects/{id}` — call `update_project`; same success/failure contract as T027 (depends on: T013, T016, T029)
+- [X] T031 [US4] `DELETE /projects/{id}` — call `soft_delete_project`; `200` with empty body on success (HTMX removes the row via `hx-swap="delete"` regardless of body); `404` if already missing/soft-deleted (depends on: T014)
+- [X] T032 [US4] `GET /projects/deleted` — render `projects/deleted.html`, strictly read-only, ascending by `serial_num` (depends on: T015)
+- [X] T033 Wire the router into the app: `app.include_router(projects.router)` in `app/main.py` (depends on: T006, T025–T032)
 
 **Checkpoint**: All 8 routes exist and call into the correct service functions with the correct success/failure response shape; full end-to-end rendering requires Phase 6.
 
@@ -117,14 +117,14 @@ Single project. `app/` holds the application package, `alembic/` holds migration
 
 **Purpose**: The Jinja2 templates and partials the Phase 5 routes render, implementing the fixed HTMX convention from research.md exactly: shared row/form partials, OOB error banner, row-level `hx-delete`.
 
-- [ ] T034 [P] [US4] `app/templates/partials/_project_row.html` — a single `<tr>` rendering every `Project` field, with the delete control using `hx-delete="/projects/{id}"`, `hx-target="closest tr"`, `hx-swap="delete"` (depends on: T007)
-- [ ] T035 [P] `app/templates/partials/_form_errors.html` — the `#form-errors` OOB fragment (`hx-swap-oob="true"`) rendering a list of validation messages (depends on: none new)
-- [ ] T036 [US1][US3] `app/templates/partials/_project_form.html` — shared form body (title, description, start_date, finished_date, notes, status select, serial_num), parameterized so it can `hx-post` (create) or `hx-put` (edit), including the always-present `#form-errors` container placeholder (depends on: T035)
-- [ ] T037 [US1] `app/templates/projects/list.html` — extends `base.html`; iterates active projects via `_project_row.html`; empty-state copy; link to `/projects/new` (depends on: T034, T005)
-- [ ] T038 [P] [US2] `app/templates/projects/detail.html` — extends `base.html`; shows every field including blank optionals rendered as empty, not an error; link to edit (depends on: T005)
-- [ ] T039 [P] [US1] `app/templates/projects/new.html` — extends `base.html`; includes `_project_form.html` configured to `hx-post` to `/projects` (depends on: T036)
-- [ ] T040 [P] [US3] `app/templates/projects/edit.html` — extends `base.html`; includes `_project_form.html` pre-filled, configured to `hx-put` to `/projects/{id}` (depends on: T036)
-- [ ] T041 [P] [US4] `app/templates/projects/deleted.html` — extends `base.html`; read-only table reusing row rendering minus the delete control; ascending by `serial_num`; no edit/restore control anywhere on the page (depends on: T005)
+- [X] T034 [P] [US4] `app/templates/partials/_project_row.html` — a single `<tr>` rendering every `Project` field, with the delete control using `hx-delete="/projects/{id}"`, `hx-target="closest tr"`, `hx-swap="delete"` (depends on: T007)
+- [X] T035 [P] `app/templates/partials/_form_errors.html` — the `#form-errors` OOB fragment (`hx-swap-oob="true"`) rendering a list of validation messages (depends on: none new)
+- [X] T036 [US1][US3] `app/templates/partials/_project_form.html` — shared form body (title, description, start_date, finished_date, notes, status select, serial_num), parameterized so it can `hx-post` (create) or `hx-put` (edit), including the always-present `#form-errors` container placeholder (depends on: T035)
+- [X] T037 [US1] `app/templates/projects/list.html` — extends `base.html`; iterates active projects via `_project_row.html`; empty-state copy; link to `/projects/new` (depends on: T034, T005)
+- [X] T038 [P] [US2] `app/templates/projects/detail.html` — extends `base.html`; shows every field including blank optionals rendered as empty, not an error; link to edit (depends on: T005)
+- [X] T039 [P] [US1] `app/templates/projects/new.html` — extends `base.html`; includes `_project_form.html` configured to `hx-post` to `/projects` (depends on: T036)
+- [X] T040 [P] [US3] `app/templates/projects/edit.html` — extends `base.html`; includes `_project_form.html` pre-filled, configured to `hx-put` to `/projects/{id}` (depends on: T036)
+- [X] T041 [P] [US4] `app/templates/projects/deleted.html` — extends `base.html`; read-only table reusing row rendering minus the delete control; ascending by `serial_num`; no edit/restore control anywhere on the page (depends on: T005)
 
 **Checkpoint**: Every route from Phase 5 now renders end-to-end; manual browser testing of all four user stories (quickstart.md) is possible.
 

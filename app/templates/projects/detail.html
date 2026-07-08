@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }}{% endblock %}
+{% block content %}
+<h2>{{ project.title }}</h2>
+<dl>
+  <dt>Serial #</dt>
+  <dd>{{ project.serial_num }}</dd>
+  <dt>Description</dt>
+  <dd>{{ project.description }}</dd>
+  <dt>Start date</dt>
+  <dd>{{ project.start_date or '' }}</dd>
+  <dt>Finished date</dt>
+  <dd>{{ project.finished_date or '' }}</dd>
+  <dt>Notes</dt>
+  <dd>{{ project.notes or '' }}</dd>
+  <dt>Status</dt>
+  <dd>{{ project.status.value }}</dd>
+</dl>
+<p><a href="/projects/{{ project.id }}/edit">Edit</a></p>
+<p><a href="/projects">Back to list</a></p>
+{% endblock %}

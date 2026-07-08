@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Deleted Items{% endblock %}
+{% block content %}
+<h2>Deleted Items</h2>
+<p><a href="/projects">Back to list</a></p>
+
+{% if projects %}
+{% set readonly = true %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Title</th>
+      <th>Description</th>
+      <th>Start</th>
+      <th>Finished</th>
+      <th>Notes</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for project in projects %}
+    {% include "partials/_project_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No deleted projects.</p>
+{% endif %}
+{% endblock %}

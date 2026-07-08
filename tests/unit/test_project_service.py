@@ -217,3 +217,37 @@ def test_length_limits(session: Session) -> None:
             status=Status.NEW,
         )
     assert "description" in exc_info.value.errors
+
+
+def test_blank_or_whitespace_title_and_description_rejected(session: Session) -> None:
+    with pytest.raises(ProjectValidationError) as exc_info:
+        create_project(session, title="   ", description="d")
+    assert "title" in exc_info.value.errors
+
+    with pytest.raises(ProjectValidationError) as exc_info:
+        create_project(session, title="Valid Title", description="  \t\n  ")
+    assert "description" in exc_info.value.errors
+
+    project = create_project(session, title="Blank Edit Target", description="d")
+
+    with pytest.raises(ProjectValidationError) as exc_info:
+        update_project(
+            session,
+            project.id,
+            serial_num=project.serial_num,
+            title="",
+            description=project.description,
+            status=Status.NEW,
+        )
+    assert "title" in exc_info.value.errors
+
+    with pytest.raises(ProjectValidationError) as exc_info:
+        update_project(
+            session,
+            project.id,
+            serial_num=project.serial_num,
+            title=project.title,
+            description="   ",
+            status=Status.NEW,
+        )
+    assert "description" in exc_info.value.errors
