@@ -46,7 +46,17 @@ This project follows **Specification-Driven Development (SDD)** using [GitHub Sp
 
 ## Project Status
 
-🚧 **Planning phase** — specification and architecture being finalized. No code has been written yet.
+🚧 **Build phase** — specification and architecture finalized. Code is getting generated from Claude code.
+
+## Running Strata with Podman (verification)
+
+podman build -t strata:verify -f Containerfile .
+
+mkdir -p ~/strata-podman-data
+podman run --rm -p 8000:8000 \
+  --userns=keep-id \
+  -v ~/strata-podman-data:/data:Z \
+  strata:verify
 
 ## License
 
