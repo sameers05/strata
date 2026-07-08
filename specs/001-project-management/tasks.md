@@ -82,14 +82,14 @@ Single project. `app/` holds the application package, `alembic/` holds migration
 
 **Purpose**: Written immediately after Phase 3, before any route exists, to lock down every rule in research.md's testing-strategy list against the service functions directly.
 
-- [ ] T017 Create `tests/conftest.py`: an isolated test DB fixture (temp-file or `:memory:` SQLite via `StaticPool`) yielding a fresh `Session` per test; must never open or touch `./data/strata.db` (depends on: T003, T007)
-- [ ] T018 [US1] `tests/unit/test_project_service.py::test_serial_num_assignment_and_reuse` — first project ever gets `serial_num=0`; next gets `max+1`; soft-deleting the project holding the current max `serial_num` lets a subsequently created project reuse that number (depends on: T012, T014, T017)
-- [ ] T019 [US3] `test_serial_num_uniqueness_conflict_and_noop` — editing a project's `serial_num` to one already used by another *active* project is rejected and the original value is retained; editing it to its own current value succeeds as a no-op (depends on: T013, T017)
-- [ ] T020 [US1][US3] `test_title_uniqueness_active_scope` — creating or editing to a title already used by another active project is rejected; a title matching a *soft-deleted* project's title is allowed (depends on: T012, T013, T014, T017)
-- [ ] T021 [US1][US3] `test_date_ordering_validation` — a `finished_date` earlier than `start_date` is rejected on both create and edit; `start_date`/`finished_date` may each be set or cleared independently (depends on: T012, T013, T017)
-- [ ] T022 [US3] `test_status_free_form_transitions` — any status value can move directly to any other, including `new` → `archived` with no intermediate step (depends on: T013, T017)
-- [ ] T023 [US4] `test_soft_delete_visibility_and_frozen_serial_num` — a soft-deleted project is excluded from `list_active_projects`/`get_active_project`, appears in `list_deleted_projects` with its `serial_num` frozen at its last active value (depends on: T014, T015, T017)
-- [ ] T024 [US1][US3] `test_length_limits` — a title beyond ~200 chars or a description beyond ~2000 chars is rejected on create and edit (depends on: T012, T013, T017)
+- [X] T017 Create `tests/conftest.py`: an isolated test DB fixture (temp-file or `:memory:` SQLite via `StaticPool`) yielding a fresh `Session` per test; must never open or touch `./data/strata.db` (depends on: T003, T007)
+- [X] T018 [US1] `tests/unit/test_project_service.py::test_serial_num_assignment_and_reuse` — first project ever gets `serial_num=0`; next gets `max+1`; soft-deleting the project holding the current max `serial_num` lets a subsequently created project reuse that number (depends on: T012, T014, T017)
+- [X] T019 [US3] `test_serial_num_uniqueness_conflict_and_noop` — editing a project's `serial_num` to one already used by another *active* project is rejected and the original value is retained; editing it to its own current value succeeds as a no-op (depends on: T013, T017)
+- [X] T020 [US1][US3] `test_title_uniqueness_active_scope` — creating or editing to a title already used by another active project is rejected; a title matching a *soft-deleted* project's title is allowed (depends on: T012, T013, T014, T017)
+- [X] T021 [US1][US3] `test_date_ordering_validation` — a `finished_date` earlier than `start_date` is rejected on both create and edit; `start_date`/`finished_date` may each be set or cleared independently (depends on: T012, T013, T017)
+- [X] T022 [US3] `test_status_free_form_transitions` — any status value can move directly to any other, including `new` → `archived` with no intermediate step (depends on: T013, T017)
+- [X] T023 [US4] `test_soft_delete_visibility_and_frozen_serial_num` — a soft-deleted project is excluded from `list_active_projects`/`get_active_project`, appears in `list_deleted_projects` with its `serial_num` frozen at its last active value (depends on: T014, T015, T017)
+- [X] T024 [US1][US3] `test_length_limits` — a title beyond ~200 chars or a description beyond ~2000 chars is rejected on create and edit (depends on: T012, T013, T017)
 
 **Checkpoint**: `pytest tests/unit` is green and exercises every rule in R1–R8 before a single HTTP route exists.
 
