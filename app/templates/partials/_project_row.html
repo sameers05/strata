@@ -9,7 +9,6 @@
   <td>
     {% if not readonly %}
     <a href="/projects/{{ project.id }}/edit">Edit</a>
-    <button type="button" hx-delete="/projects/{{ project.id }}" hx-target="closest tr" hx-swap="delete" hx-confirm="Delete this project?">Delete</button>
     {% endif %}
   </td>
 </tr>

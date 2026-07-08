@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ project.title }}{% endblock %}
 {% block content %}
+{% include "partials/_page_errors.html" %}
 <h2>{{ project.title }}</h2>
 <dl>
   <dt>Serial #</dt>
@@ -17,5 +18,8 @@
   <dd>{{ project.status.value }}</dd>
 </dl>
 <p><a href="/projects/{{ project.id }}/edit">Edit</a></p>
+<p>
+  <button type="button" hx-delete="/projects/{{ project.id }}" hx-swap="none" hx-confirm="Delete this project?">Delete</button>
+</p>
 <p><a href="/projects">Back to list</a></p>
 {% endblock %}

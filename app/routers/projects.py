@@ -128,4 +128,4 @@ def delete_project(project_id: int, session: Session = Depends(get_session)) -> 
         services.soft_delete_project(session, project_id)
     except services.ProjectNotFoundError:
         raise HTTPException(status_code=404) from None
-    return Response(status_code=200)
+    return Response(status_code=200, headers={"HX-Redirect": "/projects"})
