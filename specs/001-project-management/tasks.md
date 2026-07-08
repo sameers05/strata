@@ -54,11 +54,11 @@ Single project. `app/` holds the application package, `alembic/` holds migration
 
 **Purpose**: The `Project` SQLModel table and its reviewed Alembic migration, including the two partial unique indexes the whole feature's validation logic depends on.
 
-- [ ] T007 Define `app/models.py`: `Project` SQLModel table and a `Status` string enum (`new`, `in-progress`, `complete`, `blocked`, `deferred`, `archived`) with fields `id`, `serial_num`, `title` (≤~200 chars), `description` (≤~2000 chars), `start_date`, `finished_date`, `notes` (plain `str`, no `max_length`), `status` (default `new`), `deleted` (default `False`) — per data-model.md (depends on: T001)
-- [ ] T008 Initialize Alembic (`alembic init alembic`) and wire `alembic/env.py` to import `app.database`'s engine and `SQLModel.metadata` as the migration target (depends on: T003, T007)
-- [ ] T009 Generate the initial migration: `alembic revision --autogenerate -m "create project table"` (depends on: T008)
-- [ ] T010 Manually review and clean up the generated `alembic/versions/..._create_project.py`: verify column types/nullability match models.py, and add the two partial unique indexes — on `title` and on `serial_num` — each scoped `WHERE deleted = false`, since autogenerate does not reliably produce conditional indexes (depends on: T009)
-- [ ] T011 Apply and verify the migration: run `alembic upgrade head` against the local dev DB and confirm the `project` table and both partial indexes exist (depends on: T010)
+- [X] T007 Define `app/models.py`: `Project` SQLModel table and a `Status` string enum (`new`, `in-progress`, `complete`, `blocked`, `deferred`, `archived`) with fields `id`, `serial_num`, `title` (≤~200 chars), `description` (≤~2000 chars), `start_date`, `finished_date`, `notes` (plain `str`, no `max_length`), `status` (default `new`), `deleted` (default `False`) — per data-model.md (depends on: T001)
+- [X] T008 Initialize Alembic (`alembic init alembic`) and wire `alembic/env.py` to import `app.database`'s engine and `SQLModel.metadata` as the migration target (depends on: T003, T007)
+- [X] T009 Generate the initial migration: `alembic revision --autogenerate -m "create project table"` (depends on: T008)
+- [X] T010 Manually review and clean up the generated `alembic/versions/..._create_project.py`: verify column types/nullability match models.py, and add the two partial unique indexes — on `title` and on `serial_num` — each scoped `WHERE deleted = false`, since autogenerate does not reliably produce conditional indexes (depends on: T009)
+- [X] T011 Apply and verify the migration: run `alembic upgrade head` against the local dev DB and confirm the `project` table and both partial indexes exist (depends on: T010)
 
 **Checkpoint**: `alembic upgrade head` runs clean; the `project` table and its two partial unique indexes exist in `./data/strata.db`.
 
@@ -68,11 +68,11 @@ Single project. `app/` holds the application package, `alembic/` holds migration
 
 **Purpose**: All cross-row validation and mutation logic lives here, in one place, before any route or test touches it — per research.md, none of these rules (title/serial_num uniqueness, date ordering, free-form status) can be expressed as plain SQLModel/Pydantic field validators since they require querying sibling rows.
 
-- [ ] T012 [US1] Implement `create_project(...)` in `app/services.py`: auto-assign `serial_num` = (max active `serial_num`) + 1, or 0 if none exist (R1); enforce active-scoped title uniqueness (R4); enforce title/description length limits (R5); enforce `finished_date` not before `start_date` when both present (R3); default `status="new"`, `deleted=False` (depends on: T007)
-- [ ] T013 [US3] Implement `update_project(...)` in `app/services.py`: enforce active-scoped `serial_num` uniqueness, treating an edit to the project's own current value as a no-op success rather than a conflict (R2); enforce active-scoped title uniqueness (R4); enforce date ordering (R3); enforce length limits (R5); allow `status` to move to any of the six values with no restriction (R6) (depends on: T012)
-- [ ] T014 [US4] Implement `soft_delete_project(...)` in `app/services.py`: set `deleted=True` without recomputing or ever touching `serial_num` again (R7); this is the only delete path — there is no hard-delete function anywhere (R8); raise a not-found condition if the project is missing or already soft-deleted (depends on: T012)
-- [ ] T015 Implement `list_active_projects()`, `get_active_project(id)`, and `list_deleted_projects()` query helpers in `app/services.py`, both list queries ordered ascending by `serial_num` (depends on: T007)
-- [ ] T016 Define a `ProjectValidationError` exception (carrying field → message pairs) in `app/services.py`, raised by T012–T014 on every rejected rule, to be caught by the routers added in Phase 5 (depends on: T007)
+- [X] T012 [US1] Implement `create_project(...)` in `app/services.py`: auto-assign `serial_num` = (max active `serial_num`) + 1, or 0 if none exist (R1); enforce active-scoped title uniqueness (R4); enforce title/description length limits (R5); enforce `finished_date` not before `start_date` when both present (R3); default `status="new"`, `deleted=False` (depends on: T007)
+- [X] T013 [US3] Implement `update_project(...)` in `app/services.py`: enforce active-scoped `serial_num` uniqueness, treating an edit to the project's own current value as a no-op success rather than a conflict (R2); enforce active-scoped title uniqueness (R4); enforce date ordering (R3); enforce length limits (R5); allow `status` to move to any of the six values with no restriction (R6) (depends on: T012)
+- [X] T014 [US4] Implement `soft_delete_project(...)` in `app/services.py`: set `deleted=True` without recomputing or ever touching `serial_num` again (R7); this is the only delete path — there is no hard-delete function anywhere (R8); raise a not-found condition if the project is missing or already soft-deleted (depends on: T012)
+- [X] T015 Implement `list_active_projects()`, `get_active_project(id)`, and `list_deleted_projects()` query helpers in `app/services.py`, both list queries ordered ascending by `serial_num` (depends on: T007)
+- [X] T016 Define a `ProjectValidationError` exception (carrying field → message pairs) in `app/services.py`, raised by T012–T014 on every rejected rule, to be caught by the routers added in Phase 5 (depends on: T007)
 
 **Checkpoint**: All business rules (R1–R8) are implemented and importable, with no route or template depending on them yet.
 
