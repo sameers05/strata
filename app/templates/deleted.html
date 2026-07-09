@@ -4,6 +4,7 @@
 <h2>Deleted Items</h2>
 <p><a href="/projects">Back to list</a></p>
 
+<h3>Deleted Projects</h3>
 {% if projects %}
 {% set readonly = true %}
 <table>
@@ -27,5 +28,30 @@
 </table>
 {% else %}
 <p>No deleted projects.</p>
+{% endif %}
+
+<h3>Deleted Group-tasks</h3>
+{% if group_task_groups %}
+{% for parent, group_tasks in group_task_groups %}
+<h4>{{ parent.serial_num }} — {{ parent.title }}</h4>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Title</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for group_task in group_tasks %}
+    <tr>
+      <td>{{ group_task.serial_num }}</td>
+      <td>{{ group_task.title }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+{% else %}
+<p>No deleted group-tasks.</p>
 {% endif %}
 {% endblock %}

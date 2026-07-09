@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Edit group-task{% endblock %}
+{% block content %}
+<h2>Edit group-task</h2>
+{% include "partials/_group_task_form.html" %}
+<p><a href="/projects/{{ project.id }}">Back to project</a></p>
+{% endblock %}

@@ -8,11 +8,20 @@ from sqlmodel import Session
 
 from app import services
 from app.database import get_session
-from app.models import Status
+from app.models import Project, Status
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+router = APIRouter(prefix="/projects/{project_id}/group-tasks", tags=["group-tasks"])
 
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent.parent / "templates")
+
+
+def get_active_project_or_404(
+    project_id: int, session: Session = Depends(get_session)
+) -> Project:
+    project = services.get_active_project(session, project_id)
+    if project is None:
+        raise HTTPException(status_code=404)
+    return project
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -27,19 +36,17 @@ def _render_form_errors(request: Request, exc: services.ProjectValidationError) 
     )
 
 
-@router.get("")
-def list_projects(request: Request, session: Session = Depends(get_session)) -> Response:
-    projects = services.list_active_projects(session)
-    return templates.TemplateResponse(request, "projects/list.html", {"projects": projects})
-
-
 @router.get("/new")
-def new_project_form(request: Request) -> Response:
-    return templates.TemplateResponse(request, "projects/new.html", {})
+def new_group_task_form(
+    request: Request, project: Project = Depends(get_active_project_or_404)
+) -> Response:
+    return templates.TemplateResponse(
+        request, "group_tasks/new.html", {"project": project}
+    )
 
 
 @router.post("")
-def create_project(
+def create_group_task(
     request: Request,
     title: Annotated[str, Form()],
     description: Annotated[str, Form()],
@@ -47,11 +54,13 @@ def create_project(
     finished_date: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
     status: Annotated[str, Form()] = Status.NEW.value,
+    project: Project = Depends(get_active_project_or_404),
     session: Session = Depends(get_session),
 ) -> Response:
     try:
-        services.create_project(
+        services.create_group_task(
             session,
+            project.id,
             title=title,
             description=description,
             start_date=_parse_date(start_date),
@@ -61,44 +70,47 @@ def create_project(
         )
     except services.ProjectValidationError as exc:
         return _render_form_errors(request, exc)
-    return Response(status_code=200, headers={"HX-Redirect": "/projects"})
+    return Response(status_code=200, headers={"HX-Redirect": f"/projects/{project.id}"})
 
 
-@router.get("/deleted")
-def deleted_projects_retired() -> Response:
-    # relocated to GET /deleted (see app/routers/deleted.py) — kept only so this path
-    # 404s cleanly instead of falling through to /{project_id} and misparsing "deleted"
-    # as an int project_id (FR-025)
-    raise HTTPException(status_code=404)
-
-
-@router.get("/{project_id}")
-def project_detail(
-    request: Request, project_id: int, session: Session = Depends(get_session)
+@router.get("/{group_task_id}")
+def group_task_detail(
+    request: Request,
+    group_task_id: int,
+    project: Project = Depends(get_active_project_or_404),
+    session: Session = Depends(get_session),
 ) -> Response:
-    project = services.get_active_project(session, project_id)
-    if project is None:
+    group_task = services.get_active_group_task(session, project.id, group_task_id)
+    if group_task is None:
         raise HTTPException(status_code=404)
-    group_tasks = services.list_active_group_tasks(session, project_id=project_id)
     return templates.TemplateResponse(
-        request, "projects/detail.html", {"project": project, "group_tasks": group_tasks}
+        request,
+        "group_tasks/detail.html",
+        {"project": project, "group_task": group_task},
     )
 
 
-@router.get("/{project_id}/edit")
-def edit_project_form(
-    request: Request, project_id: int, session: Session = Depends(get_session)
-) -> Response:
-    project = services.get_active_project(session, project_id)
-    if project is None:
-        raise HTTPException(status_code=404)
-    return templates.TemplateResponse(request, "projects/edit.html", {"project": project})
-
-
-@router.put("/{project_id}")
-def update_project(
+@router.get("/{group_task_id}/edit")
+def edit_group_task_form(
     request: Request,
-    project_id: int,
+    group_task_id: int,
+    project: Project = Depends(get_active_project_or_404),
+    session: Session = Depends(get_session),
+) -> Response:
+    group_task = services.get_active_group_task(session, project.id, group_task_id)
+    if group_task is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        request,
+        "group_tasks/edit.html",
+        {"project": project, "group_task": group_task},
+    )
+
+
+@router.put("/{group_task_id}")
+def update_group_task(
+    request: Request,
+    group_task_id: int,
     serial_num: Annotated[int, Form()],
     title: Annotated[str, Form()],
     description: Annotated[str, Form()],
@@ -106,12 +118,14 @@ def update_project(
     finished_date: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
     status: Annotated[str, Form()] = Status.NEW.value,
+    project: Project = Depends(get_active_project_or_404),
     session: Session = Depends(get_session),
 ) -> Response:
     try:
-        services.update_project(
+        services.update_group_task(
             session,
-            project_id,
+            project.id,
+            group_task_id,
             serial_num=serial_num,
             title=title,
             description=description,
@@ -120,25 +134,21 @@ def update_project(
             notes=notes,
             status=Status(status),
         )
-    except services.ProjectNotFoundError:
+    except services.GroupTaskNotFoundError:
         raise HTTPException(status_code=404) from None
     except services.ProjectValidationError as exc:
         return _render_form_errors(request, exc)
-    return Response(status_code=200, headers={"HX-Redirect": "/projects"})
+    return Response(status_code=200, headers={"HX-Redirect": f"/projects/{project.id}"})
 
 
-@router.delete("/{project_id}")
-def delete_project(
-    request: Request, project_id: int, session: Session = Depends(get_session)
+@router.delete("/{group_task_id}")
+def delete_group_task(
+    group_task_id: int,
+    project: Project = Depends(get_active_project_or_404),
+    session: Session = Depends(get_session),
 ) -> Response:
     try:
-        services.soft_delete_project(session, project_id)
-    except services.ProjectNotFoundError:
+        services.soft_delete_group_task(session, project.id, group_task_id)
+    except services.GroupTaskNotFoundError:
         raise HTTPException(status_code=404) from None
-    except services.ProjectValidationError as exc:
-        return templates.TemplateResponse(
-            request,
-            "partials/_page_errors.html",
-            {"errors": list(exc.errors.values())},
-        )
-    return Response(status_code=200, headers={"HX-Redirect": "/projects"})
+    return Response(status_code=200, headers={"HX-Redirect": f"/projects/{project.id}"})

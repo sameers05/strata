@@ -2,6 +2,9 @@ import re
 
 from fastapi.testclient import TestClient
 
+from app.database import get_session
+from app.services import soft_delete_group_task
+
 
 def _create(client: TestClient, **fields):
     data = {"title": "Untitled", "description": "d", "status": "new", **fields}
@@ -171,7 +174,7 @@ def test_us4_soft_delete_and_deleted_items_flow(client: TestClient) -> None:
     r = client.get(f"/projects/{delete_id}")
     assert r.status_code == 404
 
-    r = client.get("/projects/deleted")
+    r = client.get("/deleted")
     assert r.status_code == 200
     assert "To Delete" in r.text
     assert ">0<" in r.text  # serial_num frozen at its last active value
@@ -179,7 +182,7 @@ def test_us4_soft_delete_and_deleted_items_flow(client: TestClient) -> None:
     # a second soft-delete; deleted items ascending by serial_num
     client.delete(f"/projects/{keep_id}")
 
-    deleted_page = client.get("/projects/deleted").text
+    deleted_page = client.get("/deleted").text
     first_pos = deleted_page.index("To Delete")
     second_pos = deleted_page.index("Keep Me")
     assert first_pos < second_pos
@@ -189,6 +192,42 @@ def test_us4_soft_delete_and_deleted_items_flow(client: TestClient) -> None:
     assert f"/projects/{delete_id}/edit" not in deleted_page
     r = client.get(f"/projects/{delete_id}/edit")
     assert r.status_code == 404
+
+
+def test_delete_rejected_with_active_group_tasks(client: TestClient) -> None:
+    _create(client, title="Guarded Project", description="d")
+    project_id, = _row_ids(client.get("/projects").text)
+
+    client.post(
+        f"/projects/{project_id}/group-tasks",
+        data={"title": "Blocking Task", "description": "d", "status": "new"},
+    )
+
+    r = client.delete(f"/projects/{project_id}")
+    assert r.status_code == 200
+    assert "hx-redirect" not in r.headers
+    assert 'id="page-errors"' in r.text
+    assert "hx-swap-oob" in r.text
+    assert "active group-tasks" in r.text
+
+    # Project remains active and still listed
+    r = client.get("/projects")
+    assert "Guarded Project" in r.text
+    r = client.get(f"/projects/{project_id}")
+    assert r.status_code == 200
+
+    # soft-delete the Group-task (no DELETE route exists yet — that lands in a later
+    # phase — so resolve the block directly via the service function, T023, against
+    # the same engine the test client is wired to), then the same DELETE now succeeds
+    group_task_id, = re.findall(
+        r'id="group-task-row-(\d+)"', client.get(f"/projects/{project_id}").text
+    )
+    session = next(client.app.dependency_overrides[get_session]())
+    soft_delete_group_task(session, int(project_id), int(group_task_id))
+
+    r = client.delete(f"/projects/{project_id}")
+    assert r.status_code == 200
+    assert r.headers.get("hx-redirect") == "/projects"
 
 
 def test_quickstart_manual_scenarios_end_to_end(client: TestClient) -> None:
@@ -264,6 +303,6 @@ def test_quickstart_manual_scenarios_end_to_end(client: TestClient) -> None:
     r = client.get(f"/projects/{project_id}")
     assert r.status_code == 404
 
-    deleted_page = client.get("/projects/deleted").text
+    deleted_page = client.get("/deleted").text
     assert "Website Redesign" in deleted_page
     assert "hx-delete" not in deleted_page
