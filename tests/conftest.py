@@ -7,7 +7,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.database import get_session
 from app.main import app
-from app.models import Project  # noqa: F401 — ensures the table is registered on SQLModel.metadata
+from app.models import GroupTask, Project  # noqa: F401 — ensures the tables are registered on SQLModel.metadata
 
 
 def _isolated_engine():

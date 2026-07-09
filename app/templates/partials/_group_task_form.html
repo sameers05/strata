@@ -1,0 +1,50 @@
+{% set current_status = group_task.status.value if group_task else 'new' %}
+{% include "partials/_form_errors.html" %}
+
+<form {% if group_task %}hx-put="/projects/{{ project.id }}/group-tasks/{{ group_task.id }}"{% else %}hx-post="/projects/{{ project.id }}/group-tasks"{% endif %} hx-swap="none">
+  {% if group_task %}
+  <div class="field">
+    <label for="serial_num">Serial #</label>
+    <input type="number" id="serial_num" name="serial_num" value="{{ group_task.serial_num }}" required>
+  </div>
+  {% endif %}
+
+  <div class="field">
+    <label for="title">Title</label>
+    <input type="text" id="title" name="title" maxlength="200" value="{{ group_task.title if group_task else '' }}" required>
+  </div>
+
+  <div class="field">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" maxlength="2000" required>{{ group_task.description if group_task else '' }}</textarea>
+  </div>
+
+  <div class="field">
+    <label for="start_date">Start date</label>
+    <input type="date" id="start_date" name="start_date" value="{{ group_task.start_date if group_task and group_task.start_date else '' }}">
+  </div>
+
+  <div class="field">
+    <label for="finished_date">Finished date</label>
+    <input type="date" id="finished_date" name="finished_date" value="{{ group_task.finished_date if group_task and group_task.finished_date else '' }}">
+  </div>
+
+  <div class="field">
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes">{{ group_task.notes if group_task and group_task.notes else '' }}</textarea>
+  </div>
+
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="new" {% if current_status == "new" %}selected{% endif %}>New</option>
+      <option value="in-progress" {% if current_status == "in-progress" %}selected{% endif %}>In progress</option>
+      <option value="complete" {% if current_status == "complete" %}selected{% endif %}>Complete</option>
+      <option value="blocked" {% if current_status == "blocked" %}selected{% endif %}>Blocked</option>
+      <option value="deferred" {% if current_status == "deferred" %}selected{% endif %}>Deferred</option>
+      <option value="archived" {% if current_status == "archived" %}selected{% endif %}>Archived</option>
+    </select>
+  </div>
+
+  <button type="submit">{{ "Save changes" if group_task else "Create group-task" }}</button>
+</form>

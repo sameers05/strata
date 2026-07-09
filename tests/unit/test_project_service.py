@@ -7,10 +7,12 @@ from app.models import Status
 from app.services import (
     ProjectNotFoundError,
     ProjectValidationError,
+    create_group_task,
     create_project,
     get_active_project,
     list_active_projects,
     list_deleted_projects,
+    soft_delete_group_task,
     soft_delete_project,
     update_project,
 )
@@ -251,3 +253,24 @@ def test_blank_or_whitespace_title_and_description_rejected(session: Session) ->
             status=Status.NEW,
         )
     assert "description" in exc_info.value.errors
+
+
+def test_soft_delete_blocked_by_active_group_tasks(session: Session) -> None:
+    project = create_project(session, title="Blockable Project", description="d")
+
+    # succeeds unchanged when no Group-tasks ever existed (regression check)
+    empty_project = create_project(session, title="Empty Project", description="d")
+    soft_delete_project(session, empty_project.id)
+    assert get_active_project(session, empty_project.id) is None
+
+    group_task = create_group_task(session, project.id, title="Blocking Task", description="d")
+
+    with pytest.raises(ProjectValidationError) as exc_info:
+        soft_delete_project(session, project.id)
+    assert "group_tasks" in exc_info.value.errors
+    assert get_active_project(session, project.id) is not None
+
+    # succeeds once all active Group-tasks are soft-deleted
+    soft_delete_group_task(session, project.id, group_task.id)
+    soft_delete_project(session, project.id)
+    assert get_active_project(session, project.id) is None

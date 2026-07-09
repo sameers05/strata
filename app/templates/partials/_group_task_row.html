@@ -1,0 +1,10 @@
+<tr id="group-task-row-{{ group_task.id }}">
+  <td>{{ group_task.serial_num }}</td>
+  <td><a href="/projects/{{ group_task.project_id }}/group-tasks/{{ group_task.id }}">{{ group_task.title }}</a></td>
+  <td>{{ group_task.status.value }}</td>
+  <td>{{ group_task.start_date or '' }}</td>
+  <td>{{ group_task.finished_date or '' }}</td>
+  <td>
+    <a href="/projects/{{ group_task.project_id }}/group-tasks/{{ group_task.id }}/edit">Edit</a>
+  </td>
+</tr>

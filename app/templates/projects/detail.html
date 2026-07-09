@@ -21,5 +21,30 @@
 <p>
   <button type="button" hx-delete="/projects/{{ project.id }}" hx-swap="none" hx-confirm="Delete this project?">Delete</button>
 </p>
+
+<h3>Group-tasks</h3>
+<p><a href="/projects/{{ project.id }}/group-tasks/new">New group-task</a></p>
+{% if group_tasks %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Title</th>
+      <th>Status</th>
+      <th>Start</th>
+      <th>Finished</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for group_task in group_tasks %}
+    {% include "partials/_group_task_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No group-tasks yet. <a href="/projects/{{ project.id }}/group-tasks/new">Create the first one</a>.</p>
+{% endif %}
+
 <p><a href="/projects">Back to list</a></p>
 {% endblock %}
