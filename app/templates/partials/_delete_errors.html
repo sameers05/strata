@@ -1,0 +1,9 @@
+<div id="delete-errors"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if delete_errors %}
+  <ul class="errors">
+    {% for message in delete_errors %}
+    <li>{{ message }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>

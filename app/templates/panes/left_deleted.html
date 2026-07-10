@@ -1,8 +1,4 @@
-{% extends "base.html" %}
-{% block title %}Deleted Items{% endblock %}
-{% block content %}
-<h2>Deleted Items</h2>
-<p><a href="/projects">Back to list</a></p>
+<p><a :hx-get="lastListUrl || '/panes/projects'" hx-target="#left-pane" hx-swap="innerHTML" data-pane-nav>&laquo; Back</a></p>
 
 <h3>Deleted Projects</h3>
 {% if projects %}
@@ -54,4 +50,3 @@
 {% else %}
 <p>No deleted group-tasks.</p>
 {% endif %}
-{% endblock %}

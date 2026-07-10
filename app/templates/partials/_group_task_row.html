@@ -1,10 +1,18 @@
-<tr id="group-task-row-{{ group_task.id }}">
+<tr id="group-task-row-{{ group_task.id }}"{% if oob %} hx-swap-oob="{{ oob }}"{% endif %}>
   <td>{{ group_task.serial_num }}</td>
-  <td><a href="/projects/{{ group_task.project_id }}/group-tasks/{{ group_task.id }}">{{ group_task.title }}</a></td>
+  <td>
+    <a hx-get="/panes/projects/{{ group_task.project_id }}/group-tasks/{{ group_task.id }}" hx-target="#details-pane" hx-swap="outerHTML" data-pane-nav>{{ group_task.title }}</a>
+  </td>
   <td>{{ group_task.status.value }}</td>
   <td>{{ group_task.start_date or '' }}</td>
   <td>{{ group_task.finished_date or '' }}</td>
   <td>
-    <a href="/projects/{{ group_task.project_id }}/group-tasks/{{ group_task.id }}/edit">Edit</a>
+    <button
+      type="button"
+      hx-delete="/panes/projects/{{ group_task.project_id }}/group-tasks/{{ group_task.id }}"
+      hx-swap="none"
+      hx-confirm="Delete this group-task?"
+      hx-vals='js:{selected_type: document.getElementById("details-pane").dataset.entityType, selected_id: document.getElementById("details-pane").dataset.entityId}'
+    >Delete</button>
   </td>
 </tr>

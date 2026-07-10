@@ -1,0 +1,9 @@
+<nav aria-label="breadcrumb">
+  {% if ancestor %}
+  <a hx-get="/panes/projects" hx-target="#left-pane" data-pane-nav>Projects</a>
+  <span>&rsaquo;</span>
+  <span>{{ ancestor.title }}</span>
+  {% else %}
+  <span>Projects</span>
+  {% endif %}
+</nav>

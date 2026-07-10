@@ -1,43 +1,59 @@
+import re
+
 from fastapi.testclient import TestClient
 
 
 def _create_project(client: TestClient, **fields):
     data = {"title": "Untitled Project", "description": "d", "status": "new", **fields}
-    return client.post("/projects", data=data, follow_redirects=False)
+    return client.post("/panes/projects", data=data)
 
 
 def _create_group_task(client: TestClient, project_id: int, **fields):
     data = {"title": "Untitled Task", "description": "d", "status": "new", **fields}
-    return client.post(
-        f"/projects/{project_id}/group-tasks", data=data, follow_redirects=False
-    )
+    return client.post(f"/panes/projects/{project_id}/group-tasks", data=data)
+
+
+def _row_ids(html: str) -> list[str]:
+    return re.findall(r'id="project-row-(\d+)"', html)
 
 
 def test_deleted_view_both_sections(client: TestClient) -> None:
-    _create_project(client, title="Project Alpha")  # id=1, serial_num 0
-    _create_project(client, title="Project Beta")  # id=2, serial_num 1
-    alpha_id, beta_id = 1, 2
+    _create_project(client, title="Project Alpha")  # serial_num 0
+    _create_project(client, title="Project Beta")  # serial_num 1
+    alpha_id, beta_id = _row_ids(client.get("/panes/projects").text)
 
-    _create_group_task(client, alpha_id, title="Alpha Task One")  # id=1, serial_num 0
-    _create_group_task(client, alpha_id, title="Alpha Task Two")  # id=2, serial_num 1
-    _create_group_task(client, beta_id, title="Beta Task One")  # id=3, serial_num 0
+    _create_group_task(client, alpha_id, title="Alpha Task One")  # serial_num 0
+    _create_group_task(client, alpha_id, title="Alpha Task Two")  # serial_num 1
+    _create_group_task(client, beta_id, title="Beta Task One")  # serial_num 0
+
+    alpha_task_one_id, alpha_task_two_id = re.findall(
+        r'id="group-task-row-(\d+)"', client.get(f"/panes/projects/{alpha_id}/group-tasks").text
+    )
+    beta_task_one_id = re.findall(
+        r'id="group-task-row-(\d+)"', client.get(f"/panes/projects/{beta_id}/group-tasks").text
+    )[0]
 
     # soft-delete both of Alpha's Group-tasks, then Alpha itself (now unblocked)
-    client.delete(f"/projects/{alpha_id}/group-tasks/1")
-    client.delete(f"/projects/{alpha_id}/group-tasks/2")
-    r = client.delete(f"/projects/{alpha_id}")
-    assert r.headers.get("hx-redirect") == "/projects"
+    client.request("DELETE", f"/panes/projects/{alpha_id}/group-tasks/{alpha_task_one_id}")
+    client.request("DELETE", f"/panes/projects/{alpha_id}/group-tasks/{alpha_task_two_id}")
+    r = client.request("DELETE", f"/panes/projects/{alpha_id}")
+    assert r.status_code == 200
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="project-row-{alpha_id}"' not in r.text
 
     # soft-delete Beta's one Group-task, but Beta itself stays active
-    client.delete(f"/projects/{beta_id}/group-tasks/3")
+    client.request("DELETE", f"/panes/projects/{beta_id}/group-tasks/{beta_task_one_id}")
 
-    r = client.get("/deleted")
+    r = client.get("/panes/deleted")
     assert r.status_code == 200
+    # bundled OOB empty #details-pane fragment (Deleted Items shows no selectable content)
+    assert 'id="details-pane" hx-swap-oob="true"' in r.text
+    assert "data-entity-type" not in r.text
 
     # "Deleted Projects" section: unchanged 001/002 behavior — only Alpha is here,
     # since Beta itself was never soft-deleted
     assert "Project Alpha" in r.text
-    assert 'id="project-row-2"' not in r.text
+    assert f'id="project-row-{beta_id}"' not in r.text
 
     # "Deleted Group-tasks" section: grouped by parent ascending by the parent's own
     # serial_num (Alpha=0 before Beta=1), Group-tasks within each group ascending by
@@ -54,15 +70,16 @@ def test_deleted_view_both_sections(client: TestClient) -> None:
 
 
 def test_deleted_view_empty_state(client: TestClient) -> None:
-    r = client.get("/deleted")
+    r = client.get("/panes/deleted")
     assert r.status_code == 200
     assert "No deleted projects" in r.text
     assert "No deleted group-tasks" in r.text
 
 
-def test_old_projects_deleted_url_no_longer_resolves(client: TestClient) -> None:
+def test_old_deleted_url_no_longer_resolves(client: TestClient) -> None:
     _create_project(client, title="Some Project")
-    client.delete("/projects/1")
+    project_id = _row_ids(client.get("/panes/projects").text)[0]
+    client.request("DELETE", f"/panes/projects/{project_id}")
 
-    r = client.get("/projects/deleted")
+    r = client.get("/deleted")
     assert r.status_code == 404
