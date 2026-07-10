@@ -152,15 +152,21 @@ def test_us4_delete_flow(client: TestClient) -> None:
     row_one = r.text.split(f'id="group-task-row-{one_id}"')[1].split("</tr>")[0]
     assert "disabled" not in row_one
 
-    # deleting an unrelated row leaves #details-pane untouched
+    # deleting an unrelated row: full tbody re-render (hx-swap-oob="true" on the
+    # tbody, tag-preserving), excludes the deleted row, includes the survivor;
+    # #details-pane left untouched since the deleted row wasn't the selected one
     r = client.request(
         "DELETE",
         f"/panes/projects/{project_id}/group-tasks/{two_id}",
         params={"selected_type": "group_task", "selected_id": one_id},
     )
     assert r.status_code == 200
-    assert f'id="group-task-row-{two_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="group-task-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="group-task-row-{two_id}"' not in r.text
+    assert f'id="group-task-row-{one_id}"' in r.text
     assert 'id="details-pane" hx-swap-oob="true"' not in r.text
+    # exactly one hx-swap-oob="true" (the tbody) — no leakage into the surviving row
+    assert re.findall(r'hx-swap-oob="[^"]*"', r.text).count('hx-swap-oob="true"') == 1
     assert "Task Two" not in client.get(f"/panes/projects/{project_id}/group-tasks").text
 
     # re-add a second Group-task so a "next remaining" target exists
@@ -169,26 +175,34 @@ def test_us4_delete_flow(client: TestClient) -> None:
         r'id="group-task-row-(\d+)"', client.get(f"/panes/projects/{project_id}/group-tasks").text
     )[1]
 
-    # deleting the currently-selected Group-task auto-selects the next remaining one
+    # deleting the currently-selected Group-task: tbody re-render excludes it, and
+    # #details-pane auto-selects the next remaining active one
     r = client.request(
         "DELETE",
         f"/panes/projects/{project_id}/group-tasks/{one_id}",
         params={"selected_type": "group_task", "selected_id": one_id},
     )
     assert r.status_code == 200
-    assert f'id="group-task-row-{one_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="group-task-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="group-task-row-{one_id}"' not in r.text
+    assert f'id="group-task-row-{three_id}"' in r.text
     assert 'id="details-pane" hx-swap-oob="true"' in r.text
     assert f'data-entity-type="group_task" data-entity-id="{three_id}"' in r.text
 
-    # deleting the last remaining selected Group-task falls back to the create-prompt
+    # deleting the last remaining selected Group-task -> the re-rendered tbody must
+    # now show the "No group-tasks yet." placeholder, and #details-pane falls back
+    # to the create-prompt
     r = client.request(
         "DELETE",
         f"/panes/projects/{project_id}/group-tasks/{three_id}",
         params={"selected_type": "group_task", "selected_id": three_id},
     )
     assert r.status_code == 200
-    assert "No group-tasks yet" in r.text
+    assert 'id="group-task-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="group-task-row-{three_id}"' not in r.text
+    assert "No group-tasks yet" in r.text  # inside the re-rendered tbody
     assert "data-entity-type" not in r.text
+    assert 'hx-swap-oob="True"' not in r.text  # no leakage of the tbody's own oob flag
 
     # 404: missing project_id, missing group_task_id
     r = client.request("DELETE", f"/panes/projects/999/group-tasks/{three_id}")

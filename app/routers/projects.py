@@ -222,10 +222,16 @@ def delete_project(
                 {"delete_errors": list(exc.errors.values()), "oob": True},
             )
         )
+    # Full tbody re-render (hx-swap-oob="true", default outerHTML, tag-preserving,
+    # matched by the tbody's own id) rather than a per-row hx-swap-oob="delete" —
+    # this handles every case uniformly, including removing the last remaining row,
+    # which must now show the "No projects yet." placeholder (the case a per-row
+    # removal can't express on its own). Same fix already proven correct for create.
+    projects = services.list_active_projects_with_delete_eligibility(session)
     body = _render(
         request,
-        "partials/_row_delete.html",
-        {"row_id": f"project-row-{project_id}"},
+        "panes/_row_oob.html",
+        {"row_template": "partials/_project_list_body.html", "projects": projects, "oob": True},
     )
     if selected_type == "project" and selected_id == str(project_id):
         details_template, details_context = _details_pane_default(session)

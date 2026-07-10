@@ -227,9 +227,9 @@ Single project, extending the existing `app/` package and `tests/` layout from 0
 
 **Purpose**: Confirm the full slice validates end-to-end and that every prior full-page route is genuinely gone, not just superseded.
 
-- [ ] T060 Run `pytest tests/unit tests/integration` and confirm all pass, with no regression to any existing business rule or validation behavior beyond the routing/response-shape rewrite (FR-028) (depends on: T001–T059)
-- [ ] T061 Execute quickstart.md's manual validation scenarios (US1–US7) end-to-end in a browser, including the divider drag/persistence and unsaved-changes-guard scenarios automated tests can't drive (depends on: T060)
-- [ ] T062 Confirm every prior full-page route (`/projects`, `/projects/{id}`, `/projects/{id}/edit`, `/projects/{id}/group-tasks/...`, `/deleted`) now 404s or no longer resolves, and that no template remains under `app/templates/projects/`, `app/templates/group_tasks/`, or as a top-level `app/templates/deleted.html` (FR-027) (depends on: T061)
+- [X] T060 Run `pytest tests/unit tests/integration` and confirm all pass, with no regression to any existing business rule or validation behavior beyond the routing/response-shape rewrite (FR-028) (depends on: T001–T059)
+- [X] T061 Execute quickstart.md's manual validation scenarios (US1–US7) end-to-end in a browser, including the divider drag/persistence and unsaved-changes-guard scenarios automated tests can't drive (depends on: T060)
+- [X] T062 Confirm every prior full-page route (`/projects`, `/projects/{id}`, `/projects/{id}/edit`, `/projects/{id}/group-tasks/...`, `/deleted`) now 404s or no longer resolves, and that no template remains under `app/templates/projects/`, `app/templates/group_tasks/`, or as a top-level `app/templates/deleted.html` (FR-027) (depends on: T061)
 
 ---
 

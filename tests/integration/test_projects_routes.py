@@ -175,7 +175,8 @@ def test_us4_delete_flow(client: TestClient) -> None:
     assert "disabled" not in rows[free_id]
     assert "disabled" not in rows[third_id]
 
-    # cascade-block rejection: 200, OOB #delete-errors populated, no row-removal fragment, row survives
+    # cascade-block rejection: 200, OOB #delete-errors populated, no tbody
+    # re-render fragment at all, row survives
     r = client.request(
         "DELETE",
         f"/panes/projects/{guarded_id}",
@@ -184,33 +185,45 @@ def test_us4_delete_flow(client: TestClient) -> None:
     assert r.status_code == 200
     assert 'id="delete-errors" hx-swap-oob="true"' in r.text
     assert "active group-tasks" in r.text
-    assert f'id="project-row-{guarded_id}" hx-swap-oob="delete"' not in r.text
+    assert 'id="project-list-body" hx-swap-oob="true"' not in r.text
     assert "Guarded Project" in client.get("/panes/projects").text
 
-    # deleting an unrelated row (not the one shown in #details-pane) leaves #details-pane untouched
+    # deleting an unrelated row: full tbody re-render (hx-swap-oob="true" on the
+    # tbody, tag-preserving), excludes the deleted row, includes the survivors;
+    # #details-pane left untouched since the deleted row wasn't the selected one
     r = client.request(
         "DELETE",
         f"/panes/projects/{free_id}",
         params={"selected_type": "project", "selected_id": guarded_id},
     )
     assert r.status_code == 200
-    assert f'id="project-row-{free_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="project-row-{free_id}"' not in r.text
+    assert f'id="project-row-{guarded_id}"' in r.text
+    assert f'id="project-row-{third_id}"' in r.text
     assert 'id="details-pane" hx-swap-oob="true"' not in r.text
+    # exactly one hx-swap-oob="true" (the tbody) — no leakage into surviving rows
+    assert re.findall(r'hx-swap-oob="[^"]*"', r.text).count('hx-swap-oob="true"') == 1
     assert "Free Project" not in client.get("/panes/projects").text
 
-    # deleting the currently-selected Project auto-selects the next remaining active one
+    # deleting the currently-selected Project: tbody re-render excludes it, and
+    # #details-pane auto-selects the next remaining active one
     r = client.request(
         "DELETE",
         f"/panes/projects/{third_id}",
         params={"selected_type": "project", "selected_id": third_id},
     )
     assert r.status_code == 200
-    assert f'id="project-row-{third_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="project-row-{third_id}"' not in r.text
+    assert f'id="project-row-{guarded_id}"' in r.text
     assert 'id="details-pane" hx-swap-oob="true"' in r.text
     assert 'data-entity-type="project"' in r.text
     assert "Guarded Project" in r.text  # only remaining active Project left
 
-    # unblock and remove the last remaining (selected) Project -> falls back to the create-prompt
+    # unblock and remove the last remaining (selected) Project -> the re-rendered
+    # tbody must now show the "No projects yet." placeholder, and #details-pane
+    # falls back to the create-prompt
     group_task_id = re.findall(
         r'id="group-task-row-(\d+)"', client.get(f"/panes/projects/{guarded_id}/group-tasks").text
     )[0]
@@ -221,8 +234,13 @@ def test_us4_delete_flow(client: TestClient) -> None:
         params={"selected_type": "project", "selected_id": guarded_id},
     )
     assert r.status_code == 200
-    assert "No projects yet" in r.text
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="project-row-{guarded_id}"' not in r.text
+    assert "No projects yet" in r.text  # inside the re-rendered tbody
     assert "data-entity-type" not in r.text
+    # the tbody's own oob flag must not leak into any nested include's own
+    # hx-swap-oob (a prior bug: Python's str(True) rendered as "True")
+    assert 'hx-swap-oob="True"' not in r.text
 
     # 404 on missing/soft-deleted
     r = client.request("DELETE", "/panes/projects/999")

@@ -38,7 +38,8 @@ def test_deleted_view_both_sections(client: TestClient) -> None:
     client.request("DELETE", f"/panes/projects/{alpha_id}/group-tasks/{alpha_task_two_id}")
     r = client.request("DELETE", f"/panes/projects/{alpha_id}")
     assert r.status_code == 200
-    assert f'id="project-row-{alpha_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert f'id="project-row-{alpha_id}"' not in r.text
 
     # soft-delete Beta's one Group-task, but Beta itself stays active
     client.request("DELETE", f"/panes/projects/{beta_id}/group-tasks/{beta_task_one_id}")

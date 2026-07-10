@@ -252,10 +252,20 @@ def delete_group_task(
         services.soft_delete_group_task(session, project.id, group_task_id)
     except services.GroupTaskNotFoundError:
         raise HTTPException(status_code=404) from None
+    # Full tbody re-render (hx-swap-oob="true", default outerHTML, tag-preserving,
+    # matched by the tbody's own id) rather than a per-row hx-swap-oob="delete" —
+    # this handles every case uniformly, including removing the last remaining row,
+    # which must now show the "No group-tasks yet." placeholder (the case a per-row
+    # removal can't express on its own). Same fix already proven correct for create.
+    group_tasks = services.list_active_group_tasks(session, project_id=project.id)
     body = _render(
         request,
-        "partials/_row_delete.html",
-        {"row_id": f"group-task-row-{group_task_id}"},
+        "panes/_row_oob.html",
+        {
+            "row_template": "partials/_group_task_list_body.html",
+            "group_tasks": group_tasks,
+            "oob": True,
+        },
     )
     if selected_type == "group_task" and selected_id == str(group_task_id):
         details_template, details_context = _details_pane_default(project, session)
