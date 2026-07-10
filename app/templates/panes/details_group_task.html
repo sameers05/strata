@@ -1,0 +1,3 @@
+<div id="details-pane"{% if oob %} hx-swap-oob="true"{% endif %} x-data="{ dirty: false }" x-init="dirty = false" @input="dirty = true" @change="dirty = true"{% if group_task and group_task.id is not none %} data-entity-type="group_task" data-entity-id="{{ group_task.id }}"{% endif %}>
+  {% include "partials/_group_task_form.html" %}
+</div>

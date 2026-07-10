@@ -1,0 +1,20 @@
+{% include "partials/_breadcrumb.html" %}
+
+<a hx-get="/panes/projects/new" hx-target="#details-pane" hx-swap="outerHTML" data-pane-nav>+ New Project</a>
+<a hx-get="/panes/deleted" hx-target="#left-pane" hx-swap="innerHTML" data-pane-nav>Deleted Items</a>
+
+<table>
+  <thead>
+    <tr>
+      <th>Serial #</th>
+      <th>Title</th>
+      <th>Description</th>
+      <th>Start date</th>
+      <th>Finished date</th>
+      <th>Notes</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  {% include "partials/_project_list_body.html" %}
+</table>

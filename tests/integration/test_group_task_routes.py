@@ -1,171 +1,197 @@
-from fastapi.testclient import TestClient
+import re
 
-from app.database import get_session
-from app.services import soft_delete_group_task
+from fastapi.testclient import TestClient
 
 
 def _create_project(client: TestClient, **fields):
     data = {"title": "Untitled Project", "description": "d", "status": "new", **fields}
-    return client.post("/projects", data=data, follow_redirects=False)
+    return client.post("/panes/projects", data=data)
 
 
 def _create_group_task(client: TestClient, project_id: int, **fields):
     data = {"title": "Untitled Task", "description": "d", "status": "new", **fields}
-    return client.post(
-        f"/projects/{project_id}/group-tasks", data=data, follow_redirects=False
-    )
+    return client.post(f"/panes/projects/{project_id}/group-tasks", data=data)
 
 
-def test_us1_create_and_nested_list_flow(client: TestClient) -> None:
+def _row_ids(html: str) -> list[str]:
+    return re.findall(r'id="project-row-(\d+)"', html)
+
+
+def test_us1_drill_and_select(client: TestClient) -> None:
     _create_project(client, title="Parent Project")
-    project_id = 1
+    project_id = _row_ids(client.get("/panes/projects").text)[0]
 
-    r = _create_group_task(client, project_id, title="First Task", description="d1")
+    _create_group_task(client, project_id, title="First Task", description="d1")
+
+    r = client.get(f"/panes/projects/{project_id}/group-tasks")
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == f"/projects/{project_id}"
+    assert "Parent Project" in r.text  # breadcrumb ancestor
+    assert "First Task" in r.text
+    assert 'id="details-pane" hx-swap-oob="true"' in r.text
+    assert 'data-entity-type="group_task"' in r.text
+    assert 'hx-get="/panes/deleted"' in r.text
 
-    detail = client.get(f"/projects/{project_id}")
-    assert detail.status_code == 200
-    assert "First Task" in detail.text
-    # serial_num 0 rendered somewhere in the nested list row
-    assert 'id="group-task-row-1"' in detail.text
+    group_task_id = re.findall(r'id="group-task-row-(\d+)"', r.text)[0]
 
-    # validation failure: 200 + OOB #form-errors fragment, form untouched (no redirect)
-    r = _create_group_task(client, project_id, title="   ", description="d")
+    r = client.get(f"/panes/projects/{project_id}/group-tasks/{group_task_id}")
     assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
-    assert 'id="form-errors"' in r.text
-    assert "Title is required" in r.text
+    assert f'data-entity-type="group_task" data-entity-id="{group_task_id}"' in r.text
+    assert "First Task" in r.text
 
-    # a duplicate title under a *different* Project succeeds
-    _create_project(client, title="Other Project")
-    other_project_id = 2
-    r = _create_group_task(client, other_project_id, title="First Task", description="d2")
-    assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == f"/projects/{other_project_id}"
-
-
-def test_group_task_routes_404_when_parent_project_missing(client: TestClient) -> None:
-    r = client.get("/projects/999/group-tasks/new")
+    # 404 when the parent Project is missing/soft-deleted, independent of the
+    # Group-task's own state (003's FR-015a, preserved)
+    r = client.get(f"/panes/projects/999/group-tasks/{group_task_id}")
+    assert r.status_code == 404
+    r = client.get("/panes/projects/999/group-tasks")
     assert r.status_code == 404
 
+
+def test_us2_create_group_task_flow(client: TestClient) -> None:
+    _create_project(client, title="Parent Project")
+    project_id = _row_ids(client.get("/panes/projects").text)[0]
+
+    # blank create form
+    r = client.get(f"/panes/projects/{project_id}/group-tasks/new")
+    assert r.status_code == 200
+    assert f'hx-post="/panes/projects/{project_id}/group-tasks"' in r.text
+    assert "data-entity-type" not in r.text
+
+    # success: the OOB fragment fully re-renders <tbody id="group-task-list-body">
+    # (hx-swap-oob="true", default outerHTML, tag-preserving) rather than a
+    # selector-targeted beforeend/innerHTML append, which strips the OOB element's
+    # own wrapper tag (htmx docs) and would leave orphaned <td>s with no <tr>
+    r = _create_group_task(client, project_id, title="Created Task", description="cd")
+    assert r.status_code == 200
+    assert 'data-entity-type="group_task"' in r.text
+    assert "Created Task" in r.text
+    assert 'id="group-task-list-body" hx-swap-oob="true"' in r.text
+    assert "beforeend" not in r.text
+    assert ":#group-task-list-body" not in r.text
+    assert ">0<" in r.text
+
+    # success into an already-populated list: the full tbody re-render still
+    # includes both the pre-existing and the newly created row
+    r = _create_group_task(client, project_id, title="Second Created Task", description="cd2")
+    assert r.status_code == 200
+    assert 'id="group-task-list-body" hx-swap-oob="true"' in r.text
+    assert "Created Task" in r.text
+    assert "Second Created Task" in r.text
+    # the tbody's own oob flag must not leak into each row's own hx-swap-oob
+    assert re.findall(r'hx-swap-oob="[^"]*"', r.text).count('hx-swap-oob="true"') == 1
+    assert "hx-swap-oob=\"True\"" not in r.text
+
+    # duplicate title: OOB #form-errors, entered values retained, no navigation
+    r = _create_group_task(client, project_id, title="Created Task", description="dup")
+    assert r.status_code == 200
+    assert 'id="form-errors" hx-swap-oob="true"' in r.text
+    assert "already in use" in r.text
+    assert 'value="Created Task"' in r.text
+    assert "data-entity-type" not in r.text
+
+    # 404 on both the blank-form GET and the POST when project_id is missing/soft-deleted
+    r = client.get("/panes/projects/999/group-tasks/new")
+    assert r.status_code == 404
     r = _create_group_task(client, 999, title="Task", description="d")
     assert r.status_code == 404
 
 
-def test_group_task_routes_404_when_parent_project_soft_deleted(client: TestClient) -> None:
-    _create_project(client, title="Soon Deleted")
-    project_id = 1
-    client.delete(f"/projects/{project_id}")
+def test_us3_edit_group_task_flow(client: TestClient) -> None:
+    _create_project(client, title="Parent Project")
+    project_id = _row_ids(client.get("/panes/projects").text)[0]
+    _create_group_task(client, project_id, title="Edit Target", description="d")
+    _create_group_task(client, project_id, title="Other Task", description="d")
 
-    r = client.get(f"/projects/{project_id}/group-tasks/new")
-    assert r.status_code == 404
+    r = client.get(f"/panes/projects/{project_id}/group-tasks")
+    edit_id, other_id = re.findall(r'id="group-task-row-(\d+)"', r.text)
 
-    r = _create_group_task(client, project_id, title="Task", description="d")
-    assert r.status_code == 404
-
-
-def test_us3_detail_view(client: TestClient) -> None:
-    _create_project(client, title="Detail Project")
-    project_id = 1
-    _create_group_task(
-        client,
-        project_id,
-        title="Detail Task",
-        description="A full description",
-        notes="Some notes",
-        start_date="2026-01-01",
-        finished_date="2026-02-01",
-    )
-    group_task_id = 1
-
-    r = client.get(f"/projects/{project_id}/group-tasks/{group_task_id}")
-    assert r.status_code == 200
-    assert "Detail Task" in r.text
-    assert "A full description" in r.text
-    assert "Some notes" in r.text
-    assert "2026-01-01" in r.text
-    assert "2026-02-01" in r.text
-    assert f"/projects/{project_id}" in r.text  # link back to the parent Project
-    assert 'id="page-errors"' in r.text
-
-    # 404 when the Group-task is missing
-    r = client.get(f"/projects/{project_id}/group-tasks/999")
-    assert r.status_code == 404
-
-    # 404 when the Group-task is soft-deleted
-    session = next(client.app.dependency_overrides[get_session]())
-    soft_delete_group_task(session, project_id, group_task_id)
-
-    r = client.get(f"/projects/{project_id}/group-tasks/{group_task_id}")
-    assert r.status_code == 404
-
-
-def test_us4_edit_flow(client: TestClient) -> None:
-    _create_project(client, title="Edit Project")
-    project_id = 1
-    _create_group_task(client, project_id, title="Original Title", description="d")
-    group_task_id = 1
-
-    # GET edit form is pre-filled
-    r = client.get(f"/projects/{project_id}/group-tasks/{group_task_id}/edit")
-    assert r.status_code == 200
-    assert "Original Title" in r.text
-
-    # PUT success redirects to the parent Project
+    # success: updated details fragment + OOB row replacement
     r = client.put(
-        f"/projects/{project_id}/group-tasks/{group_task_id}",
-        data={
-            "serial_num": 0,
-            "title": "Updated Title",
-            "description": "updated",
-            "status": "in-progress",
-        },
-        follow_redirects=False,
+        f"/panes/projects/{project_id}/group-tasks/{edit_id}",
+        data={"serial_num": 0, "title": "Edit Target", "description": "d", "status": "in-progress"},
     )
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == f"/projects/{project_id}"
+    assert f'data-entity-type="group_task" data-entity-id="{edit_id}"' in r.text
+    assert f'id="group-task-row-{edit_id}" hx-swap-oob="true"' in r.text
+    assert "in-progress" in r.text
 
-    detail = client.get(f"/projects/{project_id}/group-tasks/{group_task_id}")
-    assert "Updated Title" in detail.text
-    assert "in-progress" in detail.text
-
-    # PUT validation failure returns the OOB #form-errors fragment
+    # serial_num conflict: OOB #form-errors, retained values, no row-replace fragment
     r = client.put(
-        f"/projects/{project_id}/group-tasks/{group_task_id}",
-        data={
-            "serial_num": 0,
-            "title": "   ",
-            "description": "updated",
-            "status": "new",
-        },
+        f"/panes/projects/{project_id}/group-tasks/{other_id}",
+        data={"serial_num": 0, "title": "Other Task", "description": "d", "status": "new"},
     )
     assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
-    assert 'id="form-errors"' in r.text
-    assert "Title is required" in r.text
+    assert "already in use" in r.text
+    assert f'id="group-task-row-{other_id}" hx-swap-oob="true"' not in r.text
+
+    # 404: missing project_id (checked first, independent of Group-task's own state)
+    r = client.put(
+        f"/panes/projects/999/group-tasks/{edit_id}",
+        data={"serial_num": 0, "title": "Ghost", "description": "d", "status": "new"},
+    )
+    assert r.status_code == 404
+
+    # 404: missing group_task_id
+    r = client.put(
+        f"/panes/projects/{project_id}/group-tasks/999",
+        data={"serial_num": 0, "title": "Ghost", "description": "d", "status": "new"},
+    )
+    assert r.status_code == 404
 
 
-def test_us5_soft_delete_flow(client: TestClient) -> None:
-    _create_project(client, title="Delete Project")
-    project_id = 1
-    _create_group_task(client, project_id, title="Doomed Task", description="d")
-    group_task_id = 1
+def test_us4_delete_flow(client: TestClient) -> None:
+    _create_project(client, title="Parent Project")
+    project_id = _row_ids(client.get("/panes/projects").text)[0]
+    _create_group_task(client, project_id, title="Task One", description="d")
+    _create_group_task(client, project_id, title="Task Two", description="d")
 
-    detail = client.get(f"/projects/{project_id}/group-tasks/{group_task_id}")
-    assert "hx-confirm" in detail.text
-    assert f'hx-delete="/projects/{project_id}/group-tasks/{group_task_id}"' in detail.text
+    r = client.get(f"/panes/projects/{project_id}/group-tasks")
+    one_id, two_id = re.findall(r'id="group-task-row-(\d+)"', r.text)
 
-    r = client.delete(f"/projects/{project_id}/group-tasks/{group_task_id}")
+    # every Group-task row's delete control is unconditionally enabled (no `disabled`)
+    assert f'hx-delete="/panes/projects/{project_id}/group-tasks/{one_id}"' in r.text
+    row_one = r.text.split(f'id="group-task-row-{one_id}"')[1].split("</tr>")[0]
+    assert "disabled" not in row_one
+
+    # deleting an unrelated row leaves #details-pane untouched
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{project_id}/group-tasks/{two_id}",
+        params={"selected_type": "group_task", "selected_id": one_id},
+    )
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == f"/projects/{project_id}"
+    assert f'id="group-task-row-{two_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="details-pane" hx-swap-oob="true"' not in r.text
+    assert "Task Two" not in client.get(f"/panes/projects/{project_id}/group-tasks").text
 
-    # no longer appears in the nested list, and the nested list itself carries no
-    # hx-delete for any group-task (the Project's own delete control is unrelated
-    # and legitimately still present on this page)
-    project_detail = client.get(f"/projects/{project_id}")
-    assert "Doomed Task" not in project_detail.text
-    assert f'hx-delete="/projects/{project_id}/group-tasks/' not in project_detail.text
+    # re-add a second Group-task so a "next remaining" target exists
+    _create_group_task(client, project_id, title="Task Three", description="d")
+    three_id = re.findall(
+        r'id="group-task-row-(\d+)"', client.get(f"/panes/projects/{project_id}/group-tasks").text
+    )[1]
 
-    r = client.get(f"/projects/{project_id}/group-tasks/{group_task_id}")
+    # deleting the currently-selected Group-task auto-selects the next remaining one
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{project_id}/group-tasks/{one_id}",
+        params={"selected_type": "group_task", "selected_id": one_id},
+    )
+    assert r.status_code == 200
+    assert f'id="group-task-row-{one_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="details-pane" hx-swap-oob="true"' in r.text
+    assert f'data-entity-type="group_task" data-entity-id="{three_id}"' in r.text
+
+    # deleting the last remaining selected Group-task falls back to the create-prompt
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{project_id}/group-tasks/{three_id}",
+        params={"selected_type": "group_task", "selected_id": three_id},
+    )
+    assert r.status_code == 200
+    assert "No group-tasks yet" in r.text
+    assert "data-entity-type" not in r.text
+
+    # 404: missing project_id, missing group_task_id
+    r = client.request("DELETE", f"/panes/projects/999/group-tasks/{three_id}")
+    assert r.status_code == 404
+    r = client.request("DELETE", f"/panes/projects/{project_id}/group-tasks/999")
     assert r.status_code == 404

@@ -2,119 +2,137 @@ import re
 
 from fastapi.testclient import TestClient
 
-from app.database import get_session
-from app.services import soft_delete_group_task
-
 
 def _create(client: TestClient, **fields):
     data = {"title": "Untitled", "description": "d", "status": "new", **fields}
-    return client.post("/projects", data=data, follow_redirects=False)
+    return client.post("/panes/projects", data=data)
 
 
 def _row_ids(html: str) -> list[str]:
-    """Numeric project ids linked from table rows, in document order."""
-    return re.findall(r'href="/projects/(\d+)"', html)
+    """Numeric project ids of rows present in the given fragment, in document order."""
+    return re.findall(r'id="project-row-(\d+)"', html)
 
 
-def test_us1_create_and_list_flow(client: TestClient) -> None:
-    r = _create(client, title="First Project", description="d1")
+def test_us1_home_and_list_and_select(client: TestClient) -> None:
+    # empty DB: home shows the create-prompt, not a Project's details
+    r = client.get("/")
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
+    assert "No projects yet" in r.text
+    assert "Create your first project" in r.text
 
-    r = _create(client, title="Second Project", description="d2")
+    _create(client, title="First Project", description="d1")
+    _create(client, title="Second Project", description="d2")
+
+    # home now embeds the first active Project's details directly (no OOB, initial render)
+    r = client.get("/")
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
+    assert "First Project" in r.text
+    assert 'data-entity-type="project"' in r.text
 
-    r = client.get("/projects")
+    project_id = _row_ids(r.text)[0]
+
+    # list fragment + OOB details default in one response
+    r = client.get("/panes/projects")
     assert r.status_code == 200
     assert "First Project" in r.text
     assert "Second Project" in r.text
-    first_pos = r.text.index("First Project")
-    second_pos = r.text.index("Second Project")
-    assert first_pos < second_pos  # serial_num 0 then 1, ascending
+    assert 'id="details-pane" hx-swap-oob="true"' in r.text
+    assert 'data-entity-type="project"' in r.text
+    assert 'hx-get="/panes/deleted"' in r.text
 
-    # duplicate title: 200, OOB fragment, no redirect
-    r = _create(client, title="First Project", description="dup")
+    # direct select: populated fragment, correctly self-describing
+    r = client.get(f"/panes/projects/{project_id}")
     assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
-    assert 'id="form-errors"' in r.text
-    assert "hx-swap-oob" in r.text
+    assert f'data-entity-type="project" data-entity-id="{project_id}"' in r.text
+    assert "First Project" in r.text
+
+    # 404 on missing / soft-deleted
+    r = client.get("/panes/projects/999")
+    assert r.status_code == 404
+
+
+def test_us2_create_project_flow(client: TestClient) -> None:
+    # blank create form
+    r = client.get("/panes/projects/new")
+    assert r.status_code == 200
+    assert 'hx-post="/panes/projects"' in r.text
+    assert "data-entity-type" not in r.text
+
+    # success: the OOB fragment fully re-renders <tbody id="project-list-body">
+    # (hx-swap-oob="true", default outerHTML, tag-preserving) rather than a
+    # selector-targeted beforeend/innerHTML append, which strips the OOB element's
+    # own wrapper tag (htmx docs) and would leave orphaned <td>s with no <tr>
+    r = _create(client, title="Created Project", description="cd")
+    assert r.status_code == 200
+    assert 'data-entity-type="project"' in r.text
+    assert "Created Project" in r.text
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert "beforeend" not in r.text
+    assert ":#project-list-body" not in r.text  # no selector-targeted OOB syntax at all
+    assert ">0<" in r.text  # first project's auto-assigned serial_num
+
+    # success into an already-populated list: the full tbody re-render still
+    # includes both the pre-existing and the newly created row
+    r = _create(client, title="Second Created Project", description="cd2")
+    assert r.status_code == 200
+    assert 'id="project-list-body" hx-swap-oob="true"' in r.text
+    assert "Created Project" in r.text
+    assert "Second Created Project" in r.text
+    # the tbody's own oob flag must not leak into each row's own hx-swap-oob
+    # (a prior bug: rows rendered inside the tbody re-render each picked up
+    # hx-swap-oob="True" from the shared Jinja include context)
+    assert re.findall(r'hx-swap-oob="[^"]*"', r.text).count('hx-swap-oob="true"') == 1
+    assert "hx-swap-oob=\"True\"" not in r.text
+
+    # duplicate title: OOB #form-errors, entered values retained, no row added, no navigation
+    r = _create(client, title="Created Project", description="dup")
+    assert r.status_code == 200
+    assert 'id="form-errors" hx-swap-oob="true"' in r.text
     assert "already in use" in r.text
+    assert 'value="Created Project"' in r.text
+    assert "hx-swap-oob=\"beforeend" not in r.text
+    assert "data-entity-type" not in r.text
 
-    # blank required field: same in-place rejection
-    r = _create(client, title="   ", description="d")
+    # blank required field: same in-place rejection, values retained
+    r = _create(client, title="Valid Title", description="   ")
     assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
-    assert "Title is required" in r.text
+    assert "Description is required" in r.text
+    assert 'value="Valid Title"' in r.text
 
 
-def test_active_list_has_no_delete_control(client: TestClient) -> None:
-    _create(client, title="Row Without Delete", description="d")
-
-    r = client.get("/projects")
-    assert r.status_code == 200
-    assert "hx-delete" not in r.text
-    assert "/projects/new" in r.text or "New project" in r.text
-    assert "/edit" in r.text  # Edit link is still present
-
-
-def test_us2_view_detail_flow(client: TestClient) -> None:
-    _create(client, title="Detail Project", description="A description")
-
-    project_id = _row_ids(client.get("/projects").text)[0]
-
-    r = client.get(f"/projects/{project_id}")
-    assert r.status_code == 200
-    assert "Detail Project" in r.text
-    assert "A description" in r.text
-    # blank optionals (start_date, finished_date, notes) rendered as empty, not an error
-    assert r.status_code != 500
-
-
-def test_detail_page_has_page_errors_container(client: TestClient) -> None:
-    _create(client, title="Errors Container Project", description="d")
-
-    project_id = _row_ids(client.get("/projects").text)[0]
-
-    r = client.get(f"/projects/{project_id}")
-    assert r.status_code == 200
-    assert 'id="page-errors"' in r.text
-    assert "hx-swap-oob" in r.text
-
-
-def test_us3_edit_flow(client: TestClient) -> None:
+def test_us3_edit_project_flow(client: TestClient) -> None:
     _create(client, title="Edit Target", description="d")
     _create(client, title="Other Project", description="d")
 
-    edit_id, other_id = _row_ids(client.get("/projects").text)
+    r = client.get("/panes/projects")
+    edit_id, other_id = _row_ids(r.text)
 
-    # status new -> archived directly, no intermediate step, redirects
+    # success: updated details fragment + OOB row replacement, in one response
     r = client.put(
-        f"/projects/{edit_id}",
+        f"/panes/projects/{edit_id}",
         data={"serial_num": 0, "title": "Edit Target", "description": "d", "status": "archived"},
-        follow_redirects=False,
     )
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
+    assert 'data-entity-type="project" data-entity-id="' + edit_id + '"' in r.text
+    assert f'id="project-row-{edit_id}" hx-swap-oob="true"' in r.text
+    assert "archived" in r.text
 
-    detail = client.get(f"/projects/{edit_id}").text
-    assert "archived" in detail
+    r = client.get(f"/panes/projects/{edit_id}")
+    assert "archived" in r.text
 
-    # serial_num conflict: 200 + OOB fragment, original value unchanged
+    # serial_num conflict: OOB #form-errors, retained values, no row-replace fragment
     r = client.put(
-        f"/projects/{other_id}",
+        f"/panes/projects/{other_id}",
         data={"serial_num": 0, "title": "Other Project", "description": "d", "status": "new"},
     )
     assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
     assert "already in use" in r.text
-
-    active_list = client.get("/projects").text
-    assert ">1<" in active_list  # other_id's serial_num (1) is unchanged
+    assert f'id="project-row-{other_id}" hx-swap-oob="true"' not in r.text
+    assert 'data-entity-type="project" data-entity-id="' + other_id + '"' in r.text
 
     # finished_date before start_date rejected the same way
     r = client.put(
-        f"/projects/{edit_id}",
+        f"/panes/projects/{edit_id}",
         data={
             "serial_num": 0,
             "title": "Edit Target",
@@ -125,184 +143,128 @@ def test_us3_edit_flow(client: TestClient) -> None:
         },
     )
     assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
     assert "earlier" in r.text
 
-    # notes edit persists across a subsequent GET
+    # 404 on missing/soft-deleted
     r = client.put(
-        f"/projects/{edit_id}",
-        data={
-            "serial_num": 0,
-            "title": "Edit Target",
-            "description": "d",
-            "notes": "a persisted note",
-            "status": "archived",
-        },
-        follow_redirects=False,
+        "/panes/projects/999",
+        data={"serial_num": 0, "title": "Ghost", "description": "d", "status": "new"},
     )
-    assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
-
-    detail = client.get(f"/projects/{edit_id}").text
-    assert "a persisted note" in detail
-
-    # renaming an active project to a soft-deleted project's former title succeeds
-    client.delete(f"/projects/{other_id}")
-    r = client.put(
-        f"/projects/{edit_id}",
-        data={"serial_num": 0, "title": "Other Project", "description": "d", "status": "archived"},
-        follow_redirects=False,
-    )
-    assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
-
-
-def test_us4_soft_delete_and_deleted_items_flow(client: TestClient) -> None:
-    _create(client, title="To Delete", description="d")
-    _create(client, title="Keep Me", description="d")
-
-    delete_id, keep_id = _row_ids(client.get("/projects").text)
-
-    r = client.delete(f"/projects/{delete_id}")
-    assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
-
-    r = client.get("/projects")
-    assert "To Delete" not in r.text
-    assert "Keep Me" in r.text
-
-    r = client.get(f"/projects/{delete_id}")
-    assert r.status_code == 404
-
-    r = client.get("/deleted")
-    assert r.status_code == 200
-    assert "To Delete" in r.text
-    assert ">0<" in r.text  # serial_num frozen at its last active value
-
-    # a second soft-delete; deleted items ascending by serial_num
-    client.delete(f"/projects/{keep_id}")
-
-    deleted_page = client.get("/deleted").text
-    first_pos = deleted_page.index("To Delete")
-    second_pos = deleted_page.index("Keep Me")
-    assert first_pos < second_pos
-
-    # no edit/restore route reachable for a deleted item
-    assert "hx-delete" not in deleted_page
-    assert f"/projects/{delete_id}/edit" not in deleted_page
-    r = client.get(f"/projects/{delete_id}/edit")
     assert r.status_code == 404
 
 
-def test_delete_rejected_with_active_group_tasks(client: TestClient) -> None:
+def test_us4_delete_flow(client: TestClient) -> None:
     _create(client, title="Guarded Project", description="d")
-    project_id, = _row_ids(client.get("/projects").text)
+    _create(client, title="Free Project", description="d")
+    _create(client, title="Third Project", description="d")
+    guarded_id, free_id, third_id = _row_ids(client.get("/panes/projects").text)
 
     client.post(
-        f"/projects/{project_id}/group-tasks",
+        f"/panes/projects/{guarded_id}/group-tasks",
         data={"title": "Blocking Task", "description": "d", "status": "new"},
     )
 
-    r = client.delete(f"/projects/{project_id}")
-    assert r.status_code == 200
-    assert "hx-redirect" not in r.headers
-    assert 'id="page-errors"' in r.text
-    assert "hx-swap-oob" in r.text
-    assert "active group-tasks" in r.text
+    # delete control disabled when active Group-tasks exist, enabled otherwise
+    r = client.get("/panes/projects")
+    rows = {
+        pid: r.text.split(f'id="project-row-{pid}"')[1].split("</tr>")[0]
+        for pid in (guarded_id, free_id, third_id)
+    }
+    assert f'hx-delete="/panes/projects/{guarded_id}"' in r.text
+    assert "disabled" in rows[guarded_id]
+    assert "disabled" not in rows[free_id]
+    assert "disabled" not in rows[third_id]
 
-    # Project remains active and still listed
-    r = client.get("/projects")
-    assert "Guarded Project" in r.text
-    r = client.get(f"/projects/{project_id}")
-    assert r.status_code == 200
-
-    # soft-delete the Group-task (no DELETE route exists yet — that lands in a later
-    # phase — so resolve the block directly via the service function, T023, against
-    # the same engine the test client is wired to), then the same DELETE now succeeds
-    group_task_id, = re.findall(
-        r'id="group-task-row-(\d+)"', client.get(f"/projects/{project_id}").text
+    # cascade-block rejection: 200, OOB #delete-errors populated, no row-removal fragment, row survives
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{guarded_id}",
+        params={"selected_type": "", "selected_id": ""},
     )
-    session = next(client.app.dependency_overrides[get_session]())
-    soft_delete_group_task(session, int(project_id), int(group_task_id))
-
-    r = client.delete(f"/projects/{project_id}")
     assert r.status_code == 200
-    assert r.headers.get("hx-redirect") == "/projects"
+    assert 'id="delete-errors" hx-swap-oob="true"' in r.text
+    assert "active group-tasks" in r.text
+    assert f'id="project-row-{guarded_id}" hx-swap-oob="delete"' not in r.text
+    assert "Guarded Project" in client.get("/panes/projects").text
 
+    # deleting an unrelated row (not the one shown in #details-pane) leaves #details-pane untouched
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{free_id}",
+        params={"selected_type": "project", "selected_id": guarded_id},
+    )
+    assert r.status_code == 200
+    assert f'id="project-row-{free_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="details-pane" hx-swap-oob="true"' not in r.text
+    assert "Free Project" not in client.get("/panes/projects").text
 
-def test_quickstart_manual_scenarios_end_to_end(client: TestClient) -> None:
-    r = client.get("/projects")
+    # deleting the currently-selected Project auto-selects the next remaining active one
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{third_id}",
+        params={"selected_type": "project", "selected_id": third_id},
+    )
+    assert r.status_code == 200
+    assert f'id="project-row-{third_id}" hx-swap-oob="delete"' in r.text
+    assert 'id="details-pane" hx-swap-oob="true"' in r.text
+    assert 'data-entity-type="project"' in r.text
+    assert "Guarded Project" in r.text  # only remaining active Project left
+
+    # unblock and remove the last remaining (selected) Project -> falls back to the create-prompt
+    group_task_id = re.findall(
+        r'id="group-task-row-(\d+)"', client.get(f"/panes/projects/{guarded_id}/group-tasks").text
+    )[0]
+    client.request("DELETE", f"/panes/projects/{guarded_id}/group-tasks/{group_task_id}")
+    r = client.request(
+        "DELETE",
+        f"/panes/projects/{guarded_id}",
+        params={"selected_type": "project", "selected_id": guarded_id},
+    )
     assert r.status_code == 200
     assert "No projects yet" in r.text
+    assert "data-entity-type" not in r.text
 
-    r = _create(client, title="Website Redesign", description="Redesign the marketing site")
-    assert r.headers.get("hx-redirect") == "/projects"
-    r = _create(client, title="Second Project", description="d")
-    assert r.headers.get("hx-redirect") == "/projects"
-
-    list_page = client.get("/projects").text
-    assert ">0<" in list_page and ">1<" in list_page
-
-    r = _create(client, title="Website Redesign", description="dup")
-    assert "hx-redirect" not in r.headers
-    assert "already in use" in r.text
-
-    r = _create(client, title="", description="")
-    assert "hx-redirect" not in r.headers
-
-    project_id, other_id = _row_ids(list_page)
-
-    detail = client.get(f"/projects/{project_id}").text
-    assert "Website Redesign" in detail
-
-    r = client.put(
-        f"/projects/{project_id}",
-        data={"serial_num": 0, "title": "Website Redesign", "description": "d", "status": "archived"},
-        follow_redirects=False,
-    )
-    assert r.headers.get("hx-redirect") == "/projects"
-
-    r = client.put(
-        f"/projects/{other_id}",
-        data={"serial_num": 0, "title": "Second Project", "description": "d", "status": "new"},
-    )
-    assert "already in use" in r.text
-    assert ">1<" in client.get("/projects").text
-
-    r = client.put(
-        f"/projects/{project_id}",
-        data={
-            "serial_num": 0,
-            "title": "Website Redesign",
-            "description": "d",
-            "start_date": "2026-02-01",
-            "finished_date": "2026-01-01",
-            "status": "archived",
-        },
-    )
-    assert "earlier" in r.text
-
-    r = client.put(
-        f"/projects/{project_id}",
-        data={
-            "serial_num": 0,
-            "title": "Website Redesign",
-            "description": "d",
-            "notes": "multi\nparagraph\nnote",
-            "status": "archived",
-        },
-        follow_redirects=False,
-    )
-    assert r.headers.get("hx-redirect") == "/projects"
-    assert "multi" in client.get(f"/projects/{project_id}").text
-
-    client.delete(f"/projects/{project_id}")
-    r = _create(client, title="Website Redesign", description="reused title after soft-delete")
-    assert r.headers.get("hx-redirect") == "/projects"
-
-    r = client.get(f"/projects/{project_id}")
+    # 404 on missing/soft-deleted
+    r = client.request("DELETE", "/panes/projects/999")
     assert r.status_code == 404
 
-    deleted_page = client.get("/deleted").text
-    assert "Website Redesign" in deleted_page
-    assert "hx-delete" not in deleted_page
+
+def test_us5_shell_markup(client: TestClient) -> None:
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'id="pane-divider"' in r.text
+    assert "strata-split-pct" in r.text
+    assert "splitPct" in r.text
+    # live drag/resize/persistence behavior itself is manual-only (quickstart.md),
+    # not driveable via httpx TestClient
+
+
+def test_us7_nav_guard_markup(client: TestClient) -> None:
+    _create(client, title="Nav Guard Project", description="d")
+    project_id = _row_ids(client.get("/panes/projects").text)[0]
+
+    r = client.get("/panes/projects")
+    # every required nav control in the root list carries data-pane-nav
+    assert re.search(r'<a hx-get="/panes/projects/\d+/group-tasks"[^>]*data-pane-nav', r.text)
+    assert re.search(r'<a hx-get="/panes/projects/\d+" hx-target="#details-pane"[^>]*data-pane-nav', r.text)
+    assert re.search(r'<a hx-get="/panes/projects/new"[^>]*data-pane-nav', r.text)
+    assert re.search(r'<a hx-get="/panes/deleted"[^>]*data-pane-nav', r.text)
+    # absent from the delete control
+    delete_button = r.text[r.text.index("<button") : r.text.index("</button>") + len("</button>")]
+    assert "data-pane-nav" not in delete_button
+
+    # absent from the Save button (details-pane form)
+    detail = client.get(f"/panes/projects/{project_id}").text
+    save_button = detail[detail.index("<button") : detail.index("</button>") + len("</button>")]
+    assert "data-pane-nav" not in save_button
+
+    # breadcrumb "Projects" link, "+ New Group-task", and Deleted Items link all carry
+    # it in a drilled view
+    r = client.get(f"/panes/projects/{project_id}/group-tasks")
+    assert re.search(r'<a hx-get="/panes/projects" hx-target="#left-pane"[^>]*data-pane-nav', r.text)
+    assert re.search(r'<a hx-get="/panes/projects/\d+/group-tasks/new"[^>]*data-pane-nav', r.text)
+    assert re.search(r'<a hx-get="/panes/deleted"[^>]*data-pane-nav', r.text)
+
+    # Back control (Deleted Items view) carries it too
+    r = client.get("/panes/deleted")
+    assert "data-pane-nav" in r.text.split("</p>")[0]

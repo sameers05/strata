@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.models import GroupTask, Project, Status
 
@@ -183,6 +183,35 @@ def list_active_projects(session: Session) -> list[Project]:
         .order_by(Project.serial_num.asc())
     )
     return list(session.exec(statement).all())
+
+
+def list_active_projects_with_delete_eligibility(
+    session: Session,
+) -> list[tuple[Project, bool]]:
+    statement = (
+        select(Project, func.count(GroupTask.id))
+        .join(
+            GroupTask,
+            (GroupTask.project_id == Project.id) & (GroupTask.deleted == False),  # noqa: E712
+            isouter=True,
+        )
+        .where(Project.deleted == False)  # noqa: E712
+        .group_by(Project.id)
+        .order_by(Project.serial_num.asc())
+    )
+    return [(project, active_children > 0) for project, active_children in session.exec(statement).all()]
+
+
+def has_active_group_tasks(session: Session, project_id: int) -> bool:
+    return (
+        session.exec(
+            select(GroupTask.id).where(
+                GroupTask.project_id == project_id,
+                GroupTask.deleted == False,  # noqa: E712
+            )
+        ).first()
+        is not None
+    )
 
 
 def get_active_project(session: Session, project_id: int) -> Project | None:

@@ -1,8 +1,9 @@
+{% set is_saved = group_task and group_task.id is not none %}
 {% set current_status = group_task.status.value if group_task else 'new' %}
-{% include "partials/_form_errors.html" %}
+{% with oob=false %}{% include "partials/_form_errors.html" %}{% endwith %}
 
-<form {% if group_task %}hx-put="/projects/{{ project.id }}/group-tasks/{{ group_task.id }}"{% else %}hx-post="/projects/{{ project.id }}/group-tasks"{% endif %} hx-swap="none">
-  {% if group_task %}
+<form {% if is_saved %}hx-put="/panes/projects/{{ project_id }}/group-tasks/{{ group_task.id }}"{% else %}hx-post="/panes/projects/{{ project_id }}/group-tasks"{% endif %} hx-target="#details-pane" hx-swap="outerHTML">
+  {% if is_saved %}
   <div class="field">
     <label for="serial_num">Serial #</label>
     <input type="number" id="serial_num" name="serial_num" value="{{ group_task.serial_num }}" required>
@@ -46,5 +47,5 @@
     </select>
   </div>
 
-  <button type="submit">{{ "Save changes" if group_task else "Create group-task" }}</button>
+  <button type="submit">{{ "Save changes" if is_saved else "Create group-task" }}</button>
 </form>

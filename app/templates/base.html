@@ -6,13 +6,96 @@
   <title>{% block title %}Strata{% endblock %}</title>
   <link rel="stylesheet" href="/static/pico.min.css">
   <script src="/static/htmx.min.js"></script>
+  <script src="/static/alpine.min.js" defer></script>
+  <style>
+    #shell {
+      display: flex;
+      height: 100vh;
+      align-items: stretch;
+    }
+    #left-pane {
+      overflow-y: auto;
+    }
+    #details-pane {
+      flex: 1;
+      overflow-y: auto;
+    }
+    #pane-divider {
+      width: 4px;
+      background: var(--pico-muted-border-color, #ccc);
+      flex-shrink: 0;
+      cursor: col-resize;
+    }
+  </style>
+  <script>
+    const STRATA_SPLIT_KEY = "strata-split-pct";
+
+    function shellData() {
+      return {
+        splitPct: 30,
+        dragging: false,
+        lastListUrl: "",
+
+        init() {
+          const saved = localStorage.getItem(STRATA_SPLIT_KEY);
+          if (saved !== null) {
+            const parsed = parseFloat(saved);
+            if (!Number.isNaN(parsed)) this.splitPct = parsed;
+          }
+
+          // Bound via addEventListener (not the `@event` directive) because
+          // htmx's mixed-case event names (afterSwap) don't match through
+          // Alpine's attribute-derived listener, which lowercases them.
+          document.body.addEventListener("htmx:afterSwap", (evt) => this.onLeftPaneSwap(evt));
+          document.body.addEventListener("htmx:confirm", (evt) => this.onConfirm(evt));
+        },
+
+        startDrag() {
+          this.dragging = true;
+        },
+
+        onDrag(evt) {
+          if (!this.dragging) return;
+          const pct = (evt.clientX / window.innerWidth) * 100;
+          this.splitPct = Math.min(80, Math.max(10, pct));
+        },
+
+        endDrag() {
+          if (!this.dragging) return;
+          this.dragging = false;
+          localStorage.setItem(STRATA_SPLIT_KEY, this.splitPct);
+        },
+
+        onLeftPaneSwap(evt) {
+          if (evt.detail.target.id !== "left-pane") return;
+          const path = new URL(evt.detail.xhr.responseURL).pathname;
+          if (path === "/panes/deleted") return;
+          if (path === "/panes/projects" || /^\/panes\/projects\/\d+\/group-tasks$/.test(path)) {
+            this.lastListUrl = path;
+          }
+        },
+
+        onConfirm(evt) {
+          if (!evt.detail.elt.hasAttribute("data-pane-nav")) return;
+          const detailsPane = document.getElementById("details-pane");
+          const dirty = detailsPane && Alpine.$data(detailsPane).dirty;
+          if (!dirty) return;
+          evt.preventDefault();
+          if (window.confirm("Discard unsaved changes?")) {
+            evt.detail.issueRequest(true);
+          }
+        },
+      };
+    }
+  </script>
 </head>
 <body>
-  <header>
-    <h1><a href="/projects">Strata</a></h1>
-  </header>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
+  <div id="shell" x-data="shellData()">
+    <div id="left-pane" :style="`width: ${splitPct}%`">
+      {% if left_pane_template %}{% include left_pane_template %}{% endif %}
+    </div>
+    <div id="pane-divider" @pointerdown="startDrag()" @pointermove.window="onDrag($event)" @pointerup.window="endDrag()"></div>
+    {% if details_pane_template %}{% include details_pane_template %}{% endif %}
+  </div>
 </body>
 </html>

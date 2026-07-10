@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
@@ -12,12 +13,18 @@ router = APIRouter(tags=["deleted"])
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent.parent / "templates")
 
 
-@router.get("/deleted")
+def _render(request: Request, template: str, context: dict) -> str:
+    return templates.get_template(template).render({"request": request, **context})
+
+
+@router.get("/panes/deleted")
 def deleted_items(request: Request, session: Session = Depends(get_session)) -> Response:
     projects = services.list_deleted_projects(session)
     group_task_groups = services.list_deleted_group_tasks_grouped_by_project(session)
-    return templates.TemplateResponse(
+    body = _render(
         request,
-        "deleted.html",
+        "panes/left_deleted.html",
         {"projects": projects, "group_task_groups": group_task_groups},
     )
+    body += _render(request, "panes/details_empty.html", {"oob": True})
+    return HTMLResponse(body)

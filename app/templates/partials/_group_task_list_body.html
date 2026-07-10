@@ -1,0 +1,7 @@
+<tbody id="group-task-list-body"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for group_task in group_tasks %}
+  {% with oob=false %}{% include "partials/_group_task_row.html" %}{% endwith %}
+  {% else %}
+  <tr><td colspan="6">No group-tasks yet.</td></tr>
+  {% endfor %}
+</tbody>

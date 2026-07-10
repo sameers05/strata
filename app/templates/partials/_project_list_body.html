@@ -1,0 +1,7 @@
+<tbody id="project-list-body"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for project, has_active_children in projects %}
+  {% with oob=false %}{% include "partials/_project_row.html" %}{% endwith %}
+  {% else %}
+  <tr><td colspan="8">No projects yet.</td></tr>
+  {% endfor %}
+</tbody>

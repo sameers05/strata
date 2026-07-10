@@ -1,6 +1,12 @@
-<tr id="project-row-{{ project.id }}">
+<tr id="project-row-{{ project.id }}"{% if oob %} hx-swap-oob="{{ oob }}"{% endif %}>
   <td>{{ project.serial_num }}</td>
-  <td><a href="/projects/{{ project.id }}">{{ project.title }}</a></td>
+  <td>
+    {% if not readonly %}
+    <a hx-get="/panes/projects/{{ project.id }}/group-tasks" hx-target="#left-pane" hx-swap="innerHTML" data-pane-nav>{{ project.title }}</a>
+    {% else %}
+    {{ project.title }}
+    {% endif %}
+  </td>
   <td>{{ project.description }}</td>
   <td>{{ project.start_date or '' }}</td>
   <td>{{ project.finished_date or '' }}</td>
@@ -8,7 +14,15 @@
   <td>{{ project.status.value }}</td>
   <td>
     {% if not readonly %}
-    <a href="/projects/{{ project.id }}/edit">Edit</a>
+    <a hx-get="/panes/projects/{{ project.id }}" hx-target="#details-pane" hx-swap="outerHTML" data-pane-nav>View</a>
+    <button
+      type="button"
+      hx-delete="/panes/projects/{{ project.id }}"
+      hx-swap="none"
+      hx-confirm="Delete this project?"
+      hx-vals='js:{selected_type: document.getElementById("details-pane").dataset.entityType, selected_id: document.getElementById("details-pane").dataset.entityId}'
+      {% if has_active_children %}disabled{% endif %}
+    >Delete</button>
     {% endif %}
   </td>
 </tr>

@@ -1,0 +1,4 @@
+<div id="details-pane"{% if oob %} hx-swap-oob="true"{% endif %} x-data="{ dirty: false }">
+  <p>No {{ entity_label }}s yet.</p>
+  <a hx-get="{{ new_url }}" hx-target="#details-pane" hx-swap="outerHTML" data-pane-nav>+ Create your first {{ entity_label }}</a>
+</div>
